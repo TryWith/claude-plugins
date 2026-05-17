@@ -80,7 +80,7 @@ export SENTINEL_LANG=en
 | `en` | English | ✅ Source language |
 | Others (BCP 47) | — | Works if Claude can translate; naturalness not guaranteed |
 
-See [`commands/_lib/lang-preamble.md`](./commands/_lib/lang-preamble.md) for the full spec.
+See the **Language preamble & i18n contract** section at the top of [`commands/watch.md`](./commands/watch.md) for the full spec.
 
 > **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji stay shared across all languages.
 
@@ -169,7 +169,7 @@ export SENTINEL_LANG=en
 | `en` | English | ✅ ソース言語 |
 | その他 (BCP 47) | — | Claude が翻訳可能なら対応（自然さは保証されない） |
 
-詳細は [`commands/_lib/lang-preamble.md`](./commands/_lib/lang-preamble.md) を参照。
+詳細は [`commands/watch.md`](./commands/watch.md) 冒頭の **Language preamble & i18n contract** セクションを参照。
 
 > **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は全言語共通で維持されます。
 
@@ -258,7 +258,7 @@ export SENTINEL_LANG=en
 | `en` | 英语 | ✅ 源语言 |
 | 其他 (BCP 47) | — | 若 Claude 可翻译则支持（不保证自然度） |
 
-详情请参阅 [`commands/_lib/lang-preamble.md`](./commands/_lib/lang-preamble.md)。
+详情请参阅 [`commands/watch.md`](./commands/watch.md) 顶部的 **Language preamble & i18n contract** 章节。
 
 > **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中保持一致。
 

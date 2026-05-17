@@ -8,7 +8,20 @@ Run the full post-implementation workflow. Do **not** advance to the next step u
 
 ## Step 0: Determine output language
 
-Execute the contents of `_lib/lang-preamble.md`.
+Resolve the user's preferred output language and use it consistently for the
+rest of the command. See the **Language preamble & i18n contract** section of
+`watch.md` for the full priority rules (env var → Claude conversation language
+→ user message language → `ja` default), translation scope, and override
+options.
+
+```bash
+LANG_CODE="${SENTINEL_LANG:-ja}"
+echo "🌐 Language: $LANG_CODE"
+```
+
+All subsequent user-facing output (logs, notifications, commit message bodies,
+review replies, progress reports) must be translated to `$LANG_CODE` at
+runtime.
 
 ## Step 1: Simplify the code
 
@@ -105,12 +118,16 @@ MAX_REVIEW_LOOP=10
 
 Once findings are fully cleared, proceed to **Step 4**.
 
-## Step 4: PR watch loop
+## Step 4: PR watch loop & completion notification
 
-Execute the contents of `_lib/watch-pr.md` (5-min interval, exits after 2 consecutive clears; watches CI / open review comments / Changes Requested).
+Invoke the slash command:
 
-## Step 5: Completion notification
+```
+/sentinel:watch
+```
 
-Execute the contents of `_lib/notify.md`:
-- macOS desktop notification
-- Final summary in the terminal
+`/sentinel:watch` runs the full watch loop (5-min interval, exits after 2
+consecutive all-clear checks; watches CI / open review threads / Changes
+Requested) and, on exit, emits the completion notification (macOS desktop
+notification + final terminal summary). Success and aborted outcomes produce
+different notifications — see `watch.md` Section 3 for details.

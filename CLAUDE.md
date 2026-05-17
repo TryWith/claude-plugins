@@ -10,8 +10,7 @@ A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There 
 
 - `.claude-plugin/marketplace.json` — marketplace manifest (registers plugins)
 - `plugins/<name>/.claude-plugin/plugin.json` — per-plugin manifest
-- `plugins/<name>/commands/*.md` — slash command files; frontmatter `description:` exposes each one as `/<plugin>:<command>`
-- `plugins/<name>/commands/_lib/*.md` — **internal** helper files referenced from command files but **not** exposed as slash commands (the `_lib/` prefix is convention, not enforced)
+- `plugins/<name>/commands/*.md` — slash command files; frontmatter `description:` exposes each one as `/<plugin>:<command>`. Each command file is self-contained — there is no shared library directory; reuse across commands happens by invoking another slash command (e.g. `/sentinel:finalize` invokes `/sentinel:watch`).
 
 ## Validation (there is no build/test)
 
@@ -34,7 +33,7 @@ Local end-to-end install before pushing:
 
 ### i18n: English source, runtime translation
 
-All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` via `plugins/sentinel/commands/_lib/lang-preamble.md` (priority: `SENTINEL_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it.
+All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` per the **Language preamble & i18n contract** section at the top of `plugins/sentinel/commands/watch.md` (priority: `SENTINEL_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it. `finalize.md` Step 0 inlines the short preamble snippet but defers to `watch.md` for the full contract.
 
 When editing command files:
 - Keep prose and template strings in English
