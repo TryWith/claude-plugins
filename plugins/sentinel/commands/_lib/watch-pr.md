@@ -9,26 +9,38 @@
 ```bash
 PR_NUMBER=$(gh pr view --json number --jq '.number')
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
+BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
 CONSECUTIVE_CLEAR=0
+WATCH_ITER=0
+MAX_WATCH_ITER="${SENTINEL_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
 LANG_CODE="${SENTINEL_LANG:-${LANG_CODE:-ja}}"
 
 # These echoes must be translated to $LANG_CODE before being emitted
-echo "🔭 Watching started: PR #$PR_NUMBER ($REPO)"
-echo "📋 Interval: 5 min / Exit: 2 consecutive clears"
+echo "🔭 Watching started: PR #$PR_NUMBER ($REPO) on branch $BRANCH"
+echo "📋 Interval: 5 min / Exit: 2 consecutive clears / Cap: $MAX_WATCH_ITER iterations"
 ```
 
 ## Loop body
 
 Repeat the steps below **until two consecutive all-clear checks** have occurred.
 
-### Phase 1: Wait
+### Phase 1: Wait and check iteration cap
 
-Skip on the first iteration; otherwise wait 5 minutes:
+Increment the iteration counter and bail if the cap was hit.
+Skip the 5-minute wait on the first iteration; otherwise wait:
 
 ```bash
-echo "⏳ Next check in 5 min ($(date '+%H:%M'))"
-sleep 300
-echo "🔍 Checking ($(date '+%H:%M:%S'))"
+WATCH_ITER=$((WATCH_ITER + 1))
+if [ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]; then
+  echo "⛔ Reached MAX_WATCH_ITER=$MAX_WATCH_ITER without converging. Aborting and reporting."
+  break
+fi
+
+if [ "$WATCH_ITER" -gt 1 ]; then
+  echo "⏳ Iter $WATCH_ITER/$MAX_WATCH_ITER — next check in 5 min ($(date '+%H:%M'))"
+  sleep 300
+fi
+echo "🔍 Iter $WATCH_ITER/$MAX_WATCH_ITER — checking ($(date '+%H:%M:%S'))"
 ```
 
 ### Phase 2: Gather status
@@ -44,22 +56,45 @@ Decision:
 - Any `PENDING` / `IN_PROGRESS` → ⏳ (wait and re-check; no fix needed)
 - Any `FAILURE` / `ERROR` → ❌ (needs fixing)
 
-#### Open review comments
+#### Open review threads
+
+Use GitHub's review-thread state (the "Resolved" button), not raw comment counts.
+A top-level review comment's `in_reply_to_id` stays `null` even after we reply, so
+counting top-level comments would never reach zero and the loop would never exit.
 
 ```bash
-# Count
-gh api repos/$REPO/pulls/$PR_NUMBER/comments \
-  --jq '[.[] | select(.in_reply_to_id == null)] | length'
+# Count unresolved, non-outdated threads
+gh api graphql -f query='
+  query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: 100) {
+          nodes { id isResolved isOutdated }
+        }
+      }
+    }
+  }' \
+  -F owner="${REPO%%/*}" -F repo="${REPO#*/}" -F number="$PR_NUMBER" \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
+         | select(.isResolved == false and .isOutdated == false)] | length'
 
-# Details
-gh api repos/$REPO/pulls/$PR_NUMBER/comments \
-  --jq '.[] | select(.in_reply_to_id == null) | {
-    id: .id,
-    path: .path,
-    line: .line,
-    body: .body,
-    user: .user.login
-  }'
+# Details (thread id for resolve, REST databaseId of latest comment for reply)
+gh api graphql -f query='
+  query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: 100) {
+          nodes {
+            id isResolved isOutdated path line
+            comments(last: 1) { nodes { databaseId body author { login } } }
+          }
+        }
+      }
+    }
+  }' \
+  -F owner="${REPO%%/*}" -F repo="${REPO#*/}" -F number="$PR_NUMBER" \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+        | select(.isResolved == false and .isOutdated == false)'
 ```
 
 Decision:
@@ -104,10 +139,14 @@ Handle by category:
 
 ##### CI failure
 
+Scope the run lookup to this PR's branch — without `--branch`, `gh run list`
+returns runs from across all branches and the loop may analyse and "fix" an
+unrelated failure:
+
 ```bash
-FAILED_RUN=$(gh run list --limit 5 --json databaseId,conclusion \
+FAILED_RUN=$(gh run list --branch "$BRANCH" --limit 5 --json databaseId,conclusion \
   --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
-gh run view $FAILED_RUN --log-failed
+gh run view "$FAILED_RUN" --log-failed
 ```
 
 Analyze the log → fix the code → commit and push:
@@ -122,7 +161,7 @@ git push
 
 ##### Review comment response
 
-Read each comment, fix the code:
+Read each unresolved thread, fix the code:
 
 ```bash
 git add .
@@ -130,14 +169,24 @@ git commit -m "fix: address review feedback — <summary>"
 git push
 ```
 
-After the fix, reply to the comment:
+For each addressed thread, reply to the latest comment AND mark the thread resolved.
+Resolving is what flips `isResolved` to `true`, ending the loop's detection of it:
 
 ```bash
+# Reply (COMMENT_ID = REST databaseId of latest comment, from the GraphQL query above)
 gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
   -f body="Addressed. <what was done>"
+
+# Resolve the thread (THREAD_ID = GraphQL node id from the same query)
+gh api graphql -f query='
+  mutation($id: ID!) {
+    resolveReviewThread(input: { threadId: $id }) {
+      thread { isResolved }
+    }
+  }' -F id="$THREAD_ID"
 ```
 
-(The reply body must be translated to `$LANG_CODE`.)
+(The reply body must be translated to `$LANG_CODE`; the mutation is language-neutral.)
 
 ##### Changes Requested response
 
