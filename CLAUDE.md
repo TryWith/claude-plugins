@@ -34,7 +34,7 @@ Local end-to-end install before pushing:
 
 ### i18n: English source, runtime translation
 
-All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` via `plugins/sentinel/commands/_lib/i18n.md` (priority: `SENTINEL_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it.
+All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` via `plugins/sentinel/commands/_lib/lang-preamble.md` (priority: `SENTINEL_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it.
 
 When editing command files:
 - Keep prose and template strings in English

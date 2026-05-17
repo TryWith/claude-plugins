@@ -2,7 +2,7 @@
 
 > **i18n note:** strings below (e.g. "Watching started") are source templates.
 > Translate every user-facing message at runtime according to `$LANG_CODE`
-> (resolved per `_lib/i18n.md`). All emoji stay as-is.
+> (resolved per `_lib/lang-preamble.md`). All emoji stay as-is.
 
 ## Initialization
 

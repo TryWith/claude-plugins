@@ -1,7 +1,7 @@
 # Completion notification
 
 > **i18n note:** all user-facing strings below are source templates.
-> Translate them at runtime according to `$LANG_CODE` (per `_lib/i18n.md`).
+> Translate them at runtime according to `$LANG_CODE` (per `_lib/lang-preamble.md`).
 > All emoji and the Conventional Commits prefix stay as-is.
 
 ## Determine outcome
