@@ -54,14 +54,18 @@ echo "🔍 Iter $WATCH_ITER/$MAX_WATCH_ITER — checking ($(date '+%H:%M:%S'))"
 
 #### CI checks
 
+`gh pr checks --json` does **not** accept `conclusion` (only `bucket`, `state`,
+`name`, `completedAt`, etc.). Use `bucket` — it's the derived tri-state that
+collapses raw check states into pass / fail / pending / skipping / cancel.
+
 ```bash
-gh pr checks $PR_NUMBER --json name,state,conclusion 2>/dev/null
+gh pr checks "$PR_NUMBER" --json name,state,bucket
 ```
 
-Decision:
-- All `SUCCESS` → ✅
-- Any `PENDING` / `IN_PROGRESS` → ⏳ (wait and re-check; no fix needed)
-- Any `FAILURE` / `ERROR` → ❌ (needs fixing)
+Decision (based on `bucket`):
+- All `pass` (or `skipping`, e.g. NEUTRAL completion) → ✅
+- Any `pending` → ⏳ (wait and re-check; no fix needed)
+- Any `fail` or `cancel` → ❌ (needs fixing)
 
 #### Open review threads
 
@@ -118,13 +122,15 @@ branch. Once our fix lands, the CR is "superseded — awaiting re-review" and
 the loop stops counting it as an open issue.
 
 ```bash
-LAST_COMMIT_AT=$(gh api repos/$REPO/commits/$BRANCH --jq '.commit.committer.date')
+LAST_COMMIT_AT=$(gh api repos/"$REPO"/commits/"$BRANCH" --jq '.commit.committer.date')
 
-gh pr view $PR_NUMBER --json reviews \
-  --jq --arg last "$LAST_COMMIT_AT" '
-    .reviews | group_by(.author.login) | map(last)
-    | .[] | select(.state == "CHANGES_REQUESTED" and .submittedAt > $last)
-    | {author: .author.login, body: .body, submittedAt: .submittedAt}'
+# `gh --jq` only accepts a filter string (cli/cli#10263 — no --arg passthrough).
+# Pipe to standalone `jq` so we can pass --arg cleanly.
+gh pr view "$PR_NUMBER" --json reviews \
+  | jq --arg last "$LAST_COMMIT_AT" '
+      .reviews | group_by(.author.login) | map(last)
+      | .[] | select(.state == "CHANGES_REQUESTED" and .submittedAt > $last)
+      | {author: .author.login, body: .body, submittedAt: .submittedAt}'
 ```
 
 Decision:
@@ -150,13 +156,14 @@ echo "✅ Clear $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
 
 if [ "$CONSECUTIVE_CLEAR" -ge 2 ]; then
   echo "success" > "$WATCH_RESULT_FILE"   # consumed by _lib/notify.md
+  break                                    # mirror Phase 1's cap-check break
 fi
 ```
 
 | Counter | Action |
 |---------|--------|
 | 1 | Keep looping (back to Phase 1) |
-| 2 | **Exit loop** → notification (success) |
+| 2 | **Exit loop** (`break`) → notification (success) |
 
 #### ⏳ CI pending and no other issues
 
