@@ -18,7 +18,7 @@ Official Claude Code plugin catalog from TryWith Inc.
 
 | Plugin | Overview | Commands |
 |--------|----------|----------|
-| [`forge`](./plugins/forge) | Workflow orchestrator that takes a PR from creation through CI monitoring and auto-fix. Chains `/simplify`, `/commit-commands:commit-push-pr`, `/code-review:code-review`, then watches the PR every 5 minutes and auto-fixes until two consecutive all-clear checks. Multilingual output via `FORGE_LANG`. | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | Post-implementation workflow orchestrator: commit → PR → CI/review watch → auto-fix until merge-ready. | `/forge:finalize`, `/forge:watch` |
 
 ### Usage
 
@@ -53,7 +53,7 @@ Add new plugins under `plugins/` and register them in `.claude-plugin/marketplac
 
 | プラグイン | 概要 | コマンド |
 |----------|------|---------|
-| [`forge`](./plugins/forge) | PR 作成から CI 監視・自動修正までを一気通貫で担うワークフローオーケストレータ。`/simplify`・`/commit-commands:commit-push-pr`・`/code-review:code-review` を順次実行後、PR を 5 分間隔で監視し連続 2 回のクリアで終了する。`FORGE_LANG` で多言語出力対応。 | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | 実装完了後のワークフローを一括実行: コミット → PR → CI・レビュー監視 → 自動修正でマージ可能まで。 | `/forge:finalize`, `/forge:watch` |
 
 ### 利用方法
 
@@ -88,7 +88,7 @@ TryWith 公司官方 Claude Code 插件目录。
 
 | 插件 | 概要 | 命令 |
 |------|------|------|
-| [`forge`](./plugins/forge) | 一气呵成完成从 PR 创建、CI 监控到自动修复的工作流编排器。依次执行 `/simplify`、`/commit-commands:commit-push-pr`、`/code-review:code-review`，随后每 5 分钟监控 PR，连续 2 次全部通过即结束。通过 `FORGE_LANG` 支持多语言输出。 | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | 一键执行实现后工作流：提交 → PR → CI/评审监控 → 自动修复至可合并。 | `/forge:finalize`, `/forge:watch` |
 
 ### 使用方法
 
