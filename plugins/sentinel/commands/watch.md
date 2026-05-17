@@ -298,6 +298,51 @@ CONSECUTIVE_CLEAR=0
 echo "⚠️ Problems detected — counter reset ($(date '+%H:%M'))"
 ```
 
+###### Triage before acting (review comments & Changes Requested only)
+
+Not every reported issue is a real issue. Before committing a fix for a review
+comment or a Changes Requested review, classify it. CI failures skip triage —
+a broken build is unambiguous.
+
+Score the **agreement with the reviewer's point** (not your confidence in your
+own counter-argument). Read the cited code carefully before scoring:
+
+| Score | Meaning |
+|-------|---------|
+| **0** | False positive that doesn't survive light scrutiny — wrong line cited, wrong API claim, or the code already does what's requested |
+| **25** | Might be a real issue, but unverified; or applies only to a hypothetical that doesn't fit this codebase |
+| **50** | Real issue but a nitpick, or unclear whether the reviewer has full project context |
+| **75** | Clear real issue; the reviewer's analysis matches the code; fixing aligns with project direction |
+| **100** | Definitely real, confirmed by reading the cited code; the fix is obvious |
+
+Map score → action:
+
+| Score | Classification | Action |
+|-------|----------------|--------|
+| **≥ 75** | **Valid** | Fix → commit → push → reply "Addressed. <what>" → resolve the thread |
+| **50–74** | **Ambiguous** | Reply with a specific clarifying question. **Leave the thread unresolved.** The watch loop will re-detect it next iteration — that's expected; it should clear once the human answers. Do not commit speculatively. |
+| **< 50** | **Invalid** | Reply explaining the disagreement, then resolve the thread (allowing re-open). Phrase the reply as tentative, e.g. *"After review we believe this may not apply because <reason>. Happy to re-open if you disagree."* Do NOT push a code change. |
+
+Guardrails:
+
+- **Don't auto-accept** review-bot output just because it was posted. False
+  positives from review bots are common; silently fixing them dilutes the
+  loop's value and trains the team to ignore the bot.
+- **Don't auto-reject** a comment because you'd rather not deal with it. A
+  real issue mislabelled "Invalid" is worse than addressing a false positive.
+- **When in doubt, choose Ambiguous over Invalid** — keep the human in the loop.
+- The Invalid action resolves the thread with reasoning attached. Reviewers
+  can re-open. This is the right default for a watch loop to converge against
+  noisy reviewers, but it does shift the rebuttal burden to the reviewer —
+  use it honestly.
+
+For Changes Requested specifically: the GitHub model doesn't expose a
+programmatic resolve, and we intentionally never auto-dismiss other people's
+reviews. So an Invalid or Ambiguous CR will keep being detected on each
+iteration until either (a) the reviewer dismisses or re-submits, or
+(b) `MAX_WATCH_ITER` aborts. The aborted notification correctly flags this
+as "needs manual attention."
+
 Handle by category:
 
 ###### CI failure
@@ -332,18 +377,16 @@ git push
 
 ###### Review comment response
 
-Read each unresolved thread, fix the code:
+For each unresolved thread, first classify per **Triage before acting** above,
+then act based on the classification.
+
+**Valid (score ≥ 75) → fix, reply, resolve:**
 
 ```bash
 git add .
 git commit -m "fix: address review feedback — <summary>"
 git push
-```
 
-For each addressed thread, reply to the latest comment AND mark the thread resolved.
-Resolving is what flips `isResolved` to `true`, ending the loop's detection of it:
-
-```bash
 # Reply (COMMENT_ID = REST databaseId of latest comment, from the GraphQL query above)
 gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
   -f body="Addressed. <what was done>"
@@ -357,7 +400,34 @@ gh api graphql -f query='
   }' -F id="$THREAD_ID"
 ```
 
-(The reply body must be translated to `$LANG_CODE`; the mutation is language-neutral.)
+**Ambiguous (50–74) → ask clarification, leave unresolved:**
+
+```bash
+gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
+  -f body="Quick clarification before we act: <specific question>"
+# No resolve mutation. The thread stays unresolved; the loop will surface it
+# again on the next iteration. That's expected — it should clear once the
+# reviewer answers.
+```
+
+**Invalid (< 50) → reply with reasoning, resolve (allowing re-open):**
+
+```bash
+gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
+  -f body="After review we believe this may not apply because <concrete reason citing the code>. Happy to re-open if you disagree."
+
+# Resolve so the loop converges. Reviewers can re-open the thread on GitHub
+# if they want to push back.
+gh api graphql -f query='
+  mutation($id: ID!) {
+    resolveReviewThread(input: { threadId: $id }) {
+      thread { isResolved }
+    }
+  }' -F id="$THREAD_ID"
+```
+
+(All reply bodies must be translated to `$LANG_CODE`; the mutations are
+language-neutral. Commit subject prefixes stay English.)
 
 ###### Changes Requested response
 
@@ -365,12 +435,39 @@ gh api graphql -f query='
 gh pr view $PR_NUMBER --comments
 ```
 
-Read the requested changes → fix the code → commit and push.
-Do **not** automatically `re-request-review`; leave that to the human.
+Classify the CR per **Triage before acting** above, then act:
 
-Once a fix commit is pushed, the CR is considered superseded by the timestamp
-filter above and will not be re-detected on the next iteration. If the reviewer
-submits a fresh CR after our fix, it will surface again (correctly).
+**Valid (score ≥ 75) → fix and push:**
+
+Read the requested changes → fix the code → commit and push. Once a fix commit
+lands, the CR is considered superseded by the timestamp filter and will not be
+re-detected on the next iteration. Do **not** auto-`re-request-review`; leave
+that to the human.
+
+**Ambiguous (50–74) → ask clarification, do NOT push:**
+
+Post a comment on the PR (use `gh pr comment` or reply to the CR's body via
+`gh api repos/$REPO/pulls/$PR_NUMBER/reviews/<REVIEW_ID>/comments` if there's
+an inline anchor) asking a specific question. Do not push a commit, so the
+timestamp filter does NOT supersede the CR — it will continue to surface on
+each iteration. This is expected. Once the reviewer responds (re-submits or
+dismisses), the loop converges naturally.
+
+**Invalid (< 50) → reply with reasoning, do NOT push or auto-dismiss:**
+
+Post a reply explaining the disagreement, e.g. *"After review we believe
+this CR may not apply because <reason>. Could you confirm whether to dismiss
+or proceed?"* We intentionally never auto-dismiss other people's reviews, so
+the CR will persist. On subsequent iterations the loop will continue to
+detect it (the timestamp filter only supersedes via *fix* commits, not via
+comments). Eventually either:
+
+- the reviewer dismisses/re-submits → loop converges, OR
+- `MAX_WATCH_ITER` is reached → loop aborts with a "needs manual attention"
+  notification (correct outcome for a stalled disagreement).
+
+If the reviewer is unresponsive and you're confident the CR is invalid, the
+right escalation is a human conversation, not automated dismissal.
 
 #### Phase 4: Post-fix wait
 
