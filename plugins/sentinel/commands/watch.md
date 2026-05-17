@@ -305,7 +305,11 @@ comment or a Changes Requested review, classify it. CI failures skip triage —
 a broken build is unambiguous.
 
 Score the **agreement with the reviewer's point** (not your confidence in your
-own counter-argument). Read the cited code carefully before scoring:
+own counter-argument). Read the cited code carefully before scoring. The
+rubric is derived from `/code-review:code-review`'s 0-100 confidence scale,
+with the threshold split into three classes instead of `/code-review`'s
+single `< 80` filter — if you adjust one, keep the other deliberately
+aligned.
 
 | Score | Meaning |
 |-------|---------|
@@ -342,6 +346,29 @@ reviews. So an Invalid or Ambiguous CR will keep being detected on each
 iteration until either (a) the reviewer dismisses or re-submits, or
 (b) `MAX_WATCH_ITER` aborts. The aborted notification correctly flags this
 as "needs manual attention."
+
+###### Avoid re-classifying stable threads
+
+Re-triaging an unchanged thread on every 5-min iteration is the dominant
+per-iteration cost. Skip the classification work and reuse the prior result
+when both of the following are true since the last iteration:
+
+- The thread's latest comment `databaseId` is unchanged (no new reply was
+  posted by anyone).
+- The HEAD SHA of the cited file is unchanged (the code being commented on
+  hasn't moved).
+
+This applies especially to threads that were classified **Ambiguous** and
+left unresolved — same thread on the same code means the answer hasn't
+changed; re-running the rubric will just produce the same Ambiguous verdict
+at LLM cost.
+
+Suggested cache key: `threadId + latestCommentDatabaseId + citedFileSha`,
+held in an in-memory associative array. Persistence across watch sessions is
+not needed (every cron firing starts fresh and re-fetches all threads).
+
+Re-triage is required when **either** key component changes — a new reply,
+or a new commit touching the cited file.
 
 Handle by category:
 
@@ -380,7 +407,7 @@ git push
 For each unresolved thread, first classify per **Triage before acting** above,
 then act based on the classification.
 
-**Valid (score ≥ 75) → fix, reply, resolve:**
+**Valid → fix, reply, resolve:**
 
 ```bash
 git add .
@@ -400,7 +427,7 @@ gh api graphql -f query='
   }' -F id="$THREAD_ID"
 ```
 
-**Ambiguous (50–74) → ask clarification, leave unresolved:**
+**Ambiguous → ask clarification, leave unresolved:**
 
 ```bash
 gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
@@ -410,7 +437,7 @@ gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
 # reviewer answers.
 ```
 
-**Invalid (< 50) → reply with reasoning, resolve (allowing re-open):**
+**Invalid → reply with reasoning, resolve (allowing re-open):**
 
 ```bash
 gh api repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
@@ -437,14 +464,14 @@ gh pr view $PR_NUMBER --comments
 
 Classify the CR per **Triage before acting** above, then act:
 
-**Valid (score ≥ 75) → fix and push:**
+**Valid → fix and push:**
 
 Read the requested changes → fix the code → commit and push. Once a fix commit
 lands, the CR is considered superseded by the timestamp filter and will not be
 re-detected on the next iteration. Do **not** auto-`re-request-review`; leave
 that to the human.
 
-**Ambiguous (50–74) → ask clarification, do NOT push:**
+**Ambiguous → ask clarification, do NOT push:**
 
 Post a comment on the PR (use `gh pr comment` or reply to the CR's body via
 `gh api repos/$REPO/pulls/$PR_NUMBER/reviews/<REVIEW_ID>/comments` if there's
@@ -453,7 +480,7 @@ timestamp filter does NOT supersede the CR — it will continue to surface on
 each iteration. This is expected. Once the reviewer responds (re-submits or
 dismisses), the loop converges naturally.
 
-**Invalid (< 50) → reply with reasoning, do NOT push or auto-dismiss:**
+**Invalid → reply with reasoning, do NOT push or auto-dismiss:**
 
 Post a reply explaining the disagreement, e.g. *"After review we believe
 this CR may not apply because <reason>. Could you confirm whether to dismiss
