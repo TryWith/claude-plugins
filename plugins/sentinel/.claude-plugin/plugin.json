@@ -1,0 +1,24 @@
+{
+  "name": "sentinel",
+  "version": "1.0.0",
+  "description": "Workflow plugin that orchestrates simplify / commit-push-pr / code-review and watches CI / review status after PR creation, auto-fixing issues until ready to merge.",
+  "author": {
+    "name": "TryWith Engineering",
+    "email": "info@trywith.co.jp",
+    "url": "https://trywith.co.jp"
+  },
+  "repository": "https://github.com/TryWith/claude-plugins",
+  "keywords": [
+    "pr",
+    "ci",
+    "code-review",
+    "github",
+    "automation",
+    "workflow",
+    "trywith"
+  ],
+  "license": "Apache-2.0",
+  "components": {
+    "commands": ["commands/"]
+  }
+}

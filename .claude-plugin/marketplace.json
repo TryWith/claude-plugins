@@ -1,0 +1,15 @@
+{
+  "name": "trywith",
+  "owner": {
+    "name": "TryWith Inc.",
+    "email": "info@trywith.co.jp",
+    "url": "https://trywith.co.jp"
+  },
+  "plugins": [
+    {
+      "name": "sentinel",
+      "source": "./plugins/sentinel",
+      "description": "Orchestrates existing commands and watches CI / reviews after PR creation, auto-fixing until everything is green."
+    }
+  ]
+}
