@@ -227,9 +227,19 @@ LAST_COMMIT_AT=$(gh api repos/"$REPO"/commits/"$BRANCH" --jq '.commit.committer.
 
 # `gh --jq` only accepts a filter string (cli/cli#10263 — no --arg passthrough).
 # Pipe to standalone `jq` so we can pass --arg cleanly.
+#
+# Drop COMMENTED and PENDING reviews before group_by:
+#   - GitHub treats a reviewer's "current resolution state" as the latest of
+#     APPROVED / CHANGES_REQUESTED / DISMISSED. COMMENTED reviews never change
+#     that state, and PENDING reviews are private drafts. Including them
+#     means a clarification COMMENT submitted *after* a CHANGES_REQUESTED
+#     would be picked by map(last), and the active CR would silently
+#     disappear from the filter — causing premature convergence.
 gh pr view "$PR_NUMBER" --json reviews \
   | jq --arg last "$LAST_COMMIT_AT" '
-      .reviews | group_by(.author.login) | map(last)
+      .reviews
+      | map(select(.state != "COMMENTED" and .state != "PENDING"))
+      | group_by(.author.login) | map(last)
       | .[] | select(.state == "CHANGES_REQUESTED" and .submittedAt > $last)
       | {author: .author.login, body: .body, submittedAt: .submittedAt}'
 ```
