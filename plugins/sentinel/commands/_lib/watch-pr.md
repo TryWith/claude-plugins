@@ -74,23 +74,10 @@ A top-level review comment's `in_reply_to_id` stays `null` even after we reply, 
 counting top-level comments would never reach zero and the loop would never exit.
 
 ```bash
-# Count unresolved, non-outdated threads
-gh api graphql -f query='
-  query($owner: String!, $repo: String!, $number: Int!) {
-    repository(owner: $owner, name: $repo) {
-      pullRequest(number: $number) {
-        reviewThreads(first: 100) {
-          nodes { id isResolved isOutdated }
-        }
-      }
-    }
-  }' \
-  -F owner="${REPO%%/*}" -F repo="${REPO#*/}" -F number="$PR_NUMBER" \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
-         | select(.isResolved == false and .isOutdated == false)] | length'
-
-# Details (thread id for resolve, REST databaseId of latest comment for reply)
-gh api graphql -f query='
+# Single GraphQL call returns full thread details; derive count locally.
+# Includes thread id (for resolveReviewThread mutation) and the latest comment's
+# REST databaseId (for the reply endpoint).
+UNRESOLVED_THREADS=$(gh api graphql -f query='
   query($owner: String!, $repo: String!, $number: Int!) {
     repository(owner: $owner, name: $repo) {
       pullRequest(number: $number) {
@@ -104,8 +91,11 @@ gh api graphql -f query='
     }
   }' \
   -F owner="${REPO%%/*}" -F repo="${REPO#*/}" -F number="$PR_NUMBER" \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]
-        | select(.isResolved == false and .isOutdated == false)'
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
+         | select(.isResolved == false and .isOutdated == false)]')
+
+UNRESOLVED_COUNT=$(echo "$UNRESOLVED_THREADS" | jq 'length')
+echo "$UNRESOLVED_THREADS" | jq '.[]'   # one thread per line, for inspection
 ```
 
 Decision:
@@ -123,6 +113,10 @@ the loop stops counting it as an open issue.
 
 ```bash
 LAST_COMMIT_AT=$(gh api repos/"$REPO"/commits/"$BRANCH" --jq '.commit.committer.date')
+# Guard against silent fetch failure: an empty $last would make every CR
+# satisfy ".submittedAt > \"\"" and the loop would re-detect superseded CRs
+# forever, defeating the timestamp filter entirely.
+: "${LAST_COMMIT_AT:?failed to fetch latest commit timestamp for $BRANCH}"
 
 # `gh --jq` only accepts a filter string (cli/cli#10263 — no --arg passthrough).
 # Pipe to standalone `jq` so we can pass --arg cleanly.
@@ -193,11 +187,19 @@ Handle by category:
 
 Scope the run lookup to this PR's branch — without `--branch`, `gh run list`
 returns runs from across all branches and the loop may analyse and "fix" an
-unrelated failure:
+unrelated failure. Also match the full set of non-success conclusions that
+Phase 2's `cancel`/`fail` buckets cover (raw values: `failure`, `cancelled`,
+`timed_out`, `action_required`, `startup_failure`) — otherwise a cancelled or
+timed-out run leaves `FAILED_RUN` empty, no fix is pushed, and the loop spins
+to `MAX_WATCH_ITER` resetting `CONSECUTIVE_CLEAR` on every iteration.
 
 ```bash
 FAILED_RUN=$(gh run list --branch "$BRANCH" --limit 5 --json databaseId,conclusion \
-  --jq '.[] | select(.conclusion == "failure") | .databaseId' | head -1)
+  --jq '.[] | select(.conclusion == "failure"
+                      or .conclusion == "cancelled"
+                      or .conclusion == "timed_out"
+                      or .conclusion == "action_required"
+                      or .conclusion == "startup_failure") | .databaseId' | head -1)
 gh run view "$FAILED_RUN" --log-failed
 ```
 
@@ -265,25 +267,42 @@ Then **return to Phase 1** (5-min wait → re-check).
 
 ## CI completion polling (helper)
 
-If CI stays pending for a long time, poll for completion:
+If CI stays pending for a long time, poll for completion. Key off `bucket`
+(matching Phase 2) rather than raw `state` so QUEUED / WAITING / REQUESTED /
+STALE / EXPECTED — all of which Phase 2 treats as pending — are honored here
+too. Mismatched filters would let this helper return early while Phase 2 still
+sees pending, wasting a full 5-min cycle.
 
 ```bash
 # Up to 20 minutes (every 10 seconds)
 for i in $(seq 1 120); do
-  PENDING=$(gh pr checks $PR_NUMBER --json state \
-    --jq '[.[] | select(.state == "PENDING" or .state == "IN_PROGRESS")] | length')
+  PENDING=$(gh pr checks "$PR_NUMBER" --json bucket \
+    --jq '[.[] | select(.bucket == "pending")] | length')
   [ "$PENDING" -eq 0 ] && break
   sleep 10
 done
 ```
 
-## Example timeline
+## Example timelines
+
+### Success path (with a hold for pending CI)
 
 ```
 00:00  Watch start (initial check)
 00:00  ⚠️ CI failure → fix → push → counter=0
-05:00  ✅ Clear 1/2 → counter=1
-10:00  ⚠️ Review comment detected → respond → push → counter=0
-15:00  ✅ Clear 1/2 → counter=1
-20:00  ✅ Clear 2/2 → 🎉 notify
+05:00  ⏳ CI still running, no other issues → counter held at 0
+10:00  ✅ All clear → counter=1
+15:00  ⚠️ Review comment detected → respond + resolve → push → counter=0
+20:00  ⏳ CI still running → counter held at 0
+25:00  ✅ All clear → counter=1
+30:00  ✅ All clear → counter=2 → 🎉 success notify
+```
+
+### Abort path (no convergence, hits cap)
+
+```
+00:00  Watch start (initial check)
+00:00  ⚠️ Persistent CI failure → fix → push → counter=0
+…
+2:00:00 ⛔ Reached MAX_WATCH_ITER=24 → break → notify (aborted, "needs attention")
 ```
