@@ -7,8 +7,8 @@
   },
   "plugins": [
     {
-      "name": "sentinel",
-      "source": "./plugins/sentinel",
+      "name": "forge",
+      "source": "./plugins/forge",
       "description": "Orchestrates existing commands and watches CI / reviews after PR creation, auto-fixing until everything is green."
     }
   ]

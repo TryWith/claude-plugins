@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There is no application code, build pipeline, or test suite** — every "command" is a markdown file that Claude reads and interprets at invocation time. Currently ships one plugin: `sentinel`.
+A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There is no application code, build pipeline, or test suite** — every "command" is a markdown file that Claude reads and interprets at invocation time. Currently ships one plugin: `forge`.
 
 ## Repository layout
 
 - `.claude-plugin/marketplace.json` — marketplace manifest (registers plugins)
 - `plugins/<name>/.claude-plugin/plugin.json` — per-plugin manifest
-- `plugins/<name>/commands/*.md` — slash command files; frontmatter `description:` exposes each one as `/<plugin>:<command>`. Each command file is self-contained — there is no shared library directory; reuse across commands happens by invoking another slash command (e.g. `/sentinel:finalize` invokes `/sentinel:watch`).
+- `plugins/<name>/commands/*.md` — slash command files; frontmatter `description:` exposes each one as `/<plugin>:<command>`. Each command file is self-contained — there is no shared library directory; reuse across commands happens by invoking another slash command (e.g. `/forge:finalize` invokes `/forge:watch`).
 
 ## Validation (there is no build/test)
 
@@ -22,7 +22,7 @@ jq -e . plugins/<name>/.claude-plugin/plugin.json
 Local end-to-end install before pushing:
 
 ```bash
-/plugin install ./plugins/sentinel
+/plugin install ./plugins/forge
 ```
 
 ## Non-obvious conventions
@@ -33,7 +33,7 @@ Local end-to-end install before pushing:
 
 ### i18n: English source, runtime translation
 
-All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` per the **Language preamble & i18n contract** section at the top of `plugins/sentinel/commands/watch.md` (priority: `SENTINEL_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it. `finalize.md` Step 0 inlines the short preamble snippet but defers to `watch.md` for the full contract.
+All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` per the **Language preamble & i18n contract** section at the top of `plugins/forge/commands/watch.md` (priority: `FORGE_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it. `finalize.md` Step 0 inlines the short preamble snippet but defers to `watch.md` for the full contract.
 
 When editing command files:
 - Keep prose and template strings in English
@@ -43,7 +43,7 @@ When editing command files:
 
 ### Two-level command composition
 
-`/sentinel:finalize` invokes other plugins by name: `/simplify` (bundled skill), `/commit-commands:commit-push-pr`, `/code-review:code-review`. These must be installed separately. If a user's environment uses different namespaces, the call sites in `finalize.md` need editing.
+`/forge:finalize` invokes other plugins by name: `/simplify` (bundled skill), `/commit-commands:commit-push-pr`, `/code-review:code-review`. These must be installed separately. If a user's environment uses different namespaces, the call sites in `finalize.md` need editing.
 
 ### READMEs are trilingual
 

@@ -1,4 +1,4 @@
-# Sentinel
+# Forge
 
 [English](#english) | [日本語](#日本語) | [中文](#中文)
 
@@ -12,7 +12,7 @@ A Claude Code plugin that orchestrates existing developer commands and takes a P
 
 ```bash
 /plugin marketplace add TryWith/claude-plugins
-/plugin install sentinel
+/plugin install forge
 ```
 
 ### Dependencies
@@ -30,7 +30,7 @@ The following commands must be available before use:
 After finishing your implementation, run:
 
 ```bash
-/sentinel:finalize
+/forge:finalize
 ```
 
 It will automatically:
@@ -48,8 +48,8 @@ It will automatically:
 
 | Command | Purpose |
 |---------|---------|
-| `/sentinel:finalize` | Full workflow |
-| `/sentinel:watch` | PR watch loop only |
+| `/forge:finalize` | Full workflow |
+| `/forge:watch` | PR watch loop only |
 
 ### Multilingual output
 
@@ -57,7 +57,7 @@ Output messages, notifications, commit message bodies, and review replies are tr
 
 #### Language resolution order
 
-1. `SENTINEL_LANG` env var (e.g. `ja`, `en`, `zh-CN`, `ko`)
+1. `FORGE_LANG` env var (e.g. `ja`, `en`, `zh-CN`, `ko`)
 2. Claude Code conversation language setting
 3. Default: `ja` (Japanese)
 
@@ -65,11 +65,11 @@ Output messages, notifications, commit message bodies, and review replies are tr
 
 ```bash
 # Run once in English
-SENTINEL_LANG=en /sentinel:finalize
+FORGE_LANG=en /forge:finalize
 
 # Set for the whole shell
-export SENTINEL_LANG=en
-/sentinel:finalize
+export FORGE_LANG=en
+/forge:finalize
 ```
 
 #### Verified languages
@@ -101,7 +101,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 ```bash
 /plugin marketplace add TryWith/claude-plugins
-/plugin install sentinel
+/plugin install forge
 ```
 
 ### 依存コマンド
@@ -119,7 +119,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 実装完了後、以下を実行するだけ:
 
 ```bash
-/sentinel:finalize
+/forge:finalize
 ```
 
 以下が自動で実行される:
@@ -137,8 +137,8 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 | コマンド | 用途 |
 |---------|------|
-| `/sentinel:finalize` | フルワークフロー |
-| `/sentinel:watch` | PR監視ループのみ |
+| `/forge:finalize` | フルワークフロー |
+| `/forge:watch` | PR監視ループのみ |
 
 ### 多言語出力
 
@@ -146,7 +146,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 #### 言語決定の優先順位
 
-1. 環境変数 `SENTINEL_LANG`（例: `ja`, `en`, `zh-CN`, `ko`）
+1. 環境変数 `FORGE_LANG`（例: `ja`, `en`, `zh-CN`, `ko`）
 2. Claude Code の会話言語設定
 3. デフォルト: `ja`（日本語）
 
@@ -154,11 +154,11 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 ```bash
 # 一時的に英語で実行
-SENTINEL_LANG=en /sentinel:finalize
+FORGE_LANG=en /forge:finalize
 
 # シェル全体で英語に
-export SENTINEL_LANG=en
-/sentinel:finalize
+export FORGE_LANG=en
+/forge:finalize
 ```
 
 #### 検証済み言語
@@ -190,7 +190,7 @@ export SENTINEL_LANG=en
 
 ```bash
 /plugin marketplace add TryWith/claude-plugins
-/plugin install sentinel
+/plugin install forge
 ```
 
 ### 依赖命令
@@ -208,7 +208,7 @@ export SENTINEL_LANG=en
 完成实现后，运行:
 
 ```bash
-/sentinel:finalize
+/forge:finalize
 ```
 
 将自动执行:
@@ -226,8 +226,8 @@ export SENTINEL_LANG=en
 
 | 命令 | 用途 |
 |------|------|
-| `/sentinel:finalize` | 完整工作流 |
-| `/sentinel:watch` | 仅 PR 监控循环 |
+| `/forge:finalize` | 完整工作流 |
+| `/forge:watch` | 仅 PR 监控循环 |
 
 ### 多语言输出
 
@@ -235,7 +235,7 @@ export SENTINEL_LANG=en
 
 #### 语言决定优先级
 
-1. 环境变量 `SENTINEL_LANG`（例：`ja`, `en`, `zh-CN`, `ko`）
+1. 环境变量 `FORGE_LANG`（例：`ja`, `en`, `zh-CN`, `ko`）
 2. Claude Code 会话语言设置
 3. 默认：`ja`（日语）
 
@@ -243,11 +243,11 @@ export SENTINEL_LANG=en
 
 ```bash
 # 临时以英语运行
-SENTINEL_LANG=en /sentinel:finalize
+FORGE_LANG=en /forge:finalize
 
 # 整个 shell 切换为英语
-export SENTINEL_LANG=en
-/sentinel:finalize
+export FORGE_LANG=en
+/forge:finalize
 ```
 
 #### 已验证语言

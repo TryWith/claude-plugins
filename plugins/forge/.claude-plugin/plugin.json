@@ -1,5 +1,5 @@
 {
-  "name": "sentinel",
+  "name": "forge",
   "version": "1.0.0",
   "description": "Workflow plugin that orchestrates simplify / commit-push-pr / code-review and watches CI / review status after PR creation, auto-fixing issues until ready to merge.",
   "author": {

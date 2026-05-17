@@ -2,7 +2,7 @@
 description: Run the full post-implementation workflow — simplify, commit, push, PR, self-review loop, CI/review watch, and notify on completion.
 ---
 
-# /sentinel:finalize
+# /forge:finalize
 
 Run the full post-implementation workflow. Do **not** advance to the next step until the current one fully completes.
 
@@ -15,7 +15,7 @@ rest of the command. See the **Language preamble & i18n contract** section of
 options.
 
 ```bash
-LANG_CODE="${SENTINEL_LANG:-ja}"
+LANG_CODE="${FORGE_LANG:-ja}"
 echo "🌐 Language: $LANG_CODE"
 ```
 
@@ -123,10 +123,10 @@ Once findings are fully cleared, proceed to **Step 4**.
 Invoke the slash command:
 
 ```
-/sentinel:watch
+/forge:watch
 ```
 
-`/sentinel:watch` runs the full watch loop (5-min interval, exits after 2
+`/forge:watch` runs the full watch loop (5-min interval, exits after 2
 consecutive all-clear checks; watches CI / open review threads / Changes
 Requested) and, on exit, emits the completion notification (macOS desktop
 notification + final terminal summary). Success and aborted outcomes produce

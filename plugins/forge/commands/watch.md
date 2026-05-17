@@ -2,7 +2,7 @@
 description: Watch the current PR every 5 minutes and auto-fix until CI and reviews are all green.
 ---
 
-# /sentinel:watch
+# /forge:watch
 
 Watch the current PR until it converges (CI green + all review threads resolved
 + no active Changes Requested) for two consecutive 5-minute checks, then
@@ -11,7 +11,7 @@ notify. Auto-fix any detected issues along the way.
 ## Prerequisite
 
 A PR matching the current branch must already exist. If it does not, prefer
-running `/sentinel:finalize` instead.
+running `/forge:finalize` instead.
 
 ---
 
@@ -20,7 +20,7 @@ running `/sentinel:finalize` instead.
 This section serves a dual purpose:
 
 1. **Runtime preamble** — the shell snippet Claude runs at the start of every
-   Sentinel command to resolve `$LANG_CODE`.
+   Forge command to resolve `$LANG_CODE`.
 2. **i18n contract** — the canonical specification for what gets translated,
    how language is resolved, what stays in source form, and how to override.
 
@@ -30,7 +30,7 @@ Resolve the user's preferred output language and use it consistently for the
 rest of the command.
 
 ```bash
-LANG_CODE="${SENTINEL_LANG:-ja}"
+LANG_CODE="${FORGE_LANG:-ja}"
 echo "🌐 Language: $LANG_CODE"
 ```
 
@@ -45,7 +45,7 @@ The shell snippet above only handles the env var and the `ja` default
 mechanically. Steps 2 and 3 below are Claude's runtime decisions (LLM
 behavior), not encoded in shell. Priority order (highest first):
 
-1. The `SENTINEL_LANG` environment variable (e.g. `ja`, `en`, `zh-CN`, `ko`,
+1. The `FORGE_LANG` environment variable (e.g. `ja`, `en`, `zh-CN`, `ko`,
    `fr`, `de` — BCP 47 form)
 2. Claude Code's conversation language setting (CLAUDE.md / settings Language
    directive, etc.)
@@ -64,7 +64,7 @@ behavior), not encoded in shell. Priority order (highest first):
 | Progress updates to the user | ✅ | All of Claude's natural-language replies |
 | Conventional Commits prefix | ❌ | `fix:`, `feat:` stay in English |
 | Emoji | ❌ | All emoji are language-neutral and shared across every language |
-| File and command names | ❌ | `/sentinel:finalize` etc. are proper nouns |
+| File and command names | ❌ | `/forge:finalize` etc. are proper nouns |
 | Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
 
 ### Translation policy
@@ -91,14 +91,14 @@ translate to them, but naturalness is not guaranteed.
 
 ```bash
 # Inspect current setting
-echo "SENTINEL_LANG: ${SENTINEL_LANG:-(unset)}"
+echo "FORGE_LANG: ${FORGE_LANG:-(unset)}"
 
 # Force a language for a single invocation
-SENTINEL_LANG=en /sentinel:finalize
+FORGE_LANG=en /forge:finalize
 
 # Persist for the shell session
-export SENTINEL_LANG=en
-/sentinel:finalize
+export FORGE_LANG=en
+/forge:finalize
 ```
 
 ### Future extension: static message catalog
@@ -119,12 +119,12 @@ REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
-MAX_WATCH_ITER="${SENTINEL_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
+MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
 
 # Result marker consumed by Section 3 (notification). Default to "aborted" so
 # any abnormal exit (cap hit, error, killed) produces an honest notification
 # rather than a false "Ready to merge".
-WATCH_RESULT_FILE="${SENTINEL_RESULT_FILE:-/tmp/sentinel-watch-result-$PR_NUMBER}"
+WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-/tmp/forge-watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
 # These echoes must be translated to $LANG_CODE before being emitted
@@ -582,12 +582,12 @@ Branch on `$WATCH_RESULT`. Translate the title and body to `$LANG_CODE`.
 if [ "$WATCH_RESULT" = "success" ]; then
   # Example ($LANG_CODE=en)
   osascript -e "display notification \"All CI checks and reviews passed! Ready to merge 🎉\" \
-    with title \"Sentinel — PR #$PR_NUMBER complete\" \
+    with title \"Forge — PR #$PR_NUMBER complete\" \
     sound name \"Glass\""
 else
   # Aborted: hit MAX_WATCH_ITER, or never converged. Open items remain.
   osascript -e "display notification \"Watch loop aborted before converging — open items remain. Inspect the PR.\" \
-    with title \"Sentinel — PR #$PR_NUMBER needs attention\" \
+    with title \"Forge — PR #$PR_NUMBER needs attention\" \
     sound name \"Basso\""
 fi
 ```
