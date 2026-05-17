@@ -15,6 +15,12 @@ WATCH_ITER=0
 MAX_WATCH_ITER="${SENTINEL_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
 LANG_CODE="${SENTINEL_LANG:-${LANG_CODE:-ja}}"
 
+# Result marker consumed by _lib/notify.md. Default to "aborted" so any abnormal
+# exit (cap hit, error, killed) produces an honest notification rather than a
+# false "Ready to merge".
+WATCH_RESULT_FILE="${SENTINEL_RESULT_FILE:-/tmp/sentinel-watch-result-$PR_NUMBER}"
+echo "aborted" > "$WATCH_RESULT_FILE"
+
 # These echoes must be translated to $LANG_CODE before being emitted
 echo "🔭 Watching started: PR #$PR_NUMBER ($REPO) on branch $BRANCH"
 echo "📋 Interval: 5 min / Exit: 2 consecutive clears / Cap: $MAX_WATCH_ITER iterations"
@@ -33,6 +39,7 @@ Skip the 5-minute wait on the first iteration; otherwise wait:
 WATCH_ITER=$((WATCH_ITER + 1))
 if [ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]; then
   echo "⛔ Reached MAX_WATCH_ITER=$MAX_WATCH_ITER without converging. Aborting and reporting."
+  # WATCH_RESULT_FILE already holds "aborted" from initialization; leave as-is
   break
 fi
 
@@ -103,30 +110,68 @@ Decision:
 
 #### Changes Requested reviews
 
+A `CHANGES_REQUESTED` state only clears when the human reviewer dismisses or
+re-submits the review (we intentionally don't auto-dismiss). To prevent the
+loop from re-detecting the same CR forever after we push a fix, treat a CR as
+**active** only if it was submitted *after* the most recent commit on the
+branch. Once our fix lands, the CR is "superseded — awaiting re-review" and
+the loop stops counting it as an open issue.
+
 ```bash
+LAST_COMMIT_AT=$(gh api repos/$REPO/commits/$BRANCH --jq '.commit.committer.date')
+
 gh pr view $PR_NUMBER --json reviews \
-  --jq '.reviews | group_by(.author.login) | map(last)
-        | .[] | select(.state == "CHANGES_REQUESTED")
-        | {author: .author.login, body: .body}'
+  --jq --arg last "$LAST_COMMIT_AT" '
+    .reviews | group_by(.author.login) | map(last)
+    | .[] | select(.state == "CHANGES_REQUESTED" and .submittedAt > $last)
+    | {author: .author.login, body: .body, submittedAt: .submittedAt}'
 ```
 
 Decision:
-- 0 → ✅
+- 0 → ✅ (no active CR — either none, or all superseded by a newer commit)
 - ≥1 → ❌ (needs response)
 
 ### Phase 3: Decide and branch
+
+The decision tree maps Phase 2's three CI outcomes (✅ / ⏳ / ❌) plus thread and
+Changes Requested state to three Phase 3 branches:
+
+| CI | Threads / CR | Branch |
+|----|--------------|--------|
+| ✅ all pass | 0 / 0 | ✅ All clear (counter +1) |
+| ⏳ pending or in_progress | 0 / 0 | ⏳ Hold (counter unchanged) |
+| ❌ failure, OR any threads, OR any active CR | — | ❌ Problems found (counter = 0, fix) |
 
 #### ✅ All clear
 
 ```bash
 CONSECUTIVE_CLEAR=$((CONSECUTIVE_CLEAR + 1))
 echo "✅ Clear $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
+
+if [ "$CONSECUTIVE_CLEAR" -ge 2 ]; then
+  echo "success" > "$WATCH_RESULT_FILE"   # consumed by _lib/notify.md
+fi
 ```
 
 | Counter | Action |
 |---------|--------|
 | 1 | Keep looping (back to Phase 1) |
-| 2 | **Exit loop** → notification |
+| 2 | **Exit loop** → notification (success) |
+
+#### ⏳ CI pending and no other issues
+
+If CI is still running but threads and Changes Requested are both empty,
+the iteration is inconclusive. Do **not** touch `CONSECUTIVE_CLEAR` — neither
+increment (no fresh evidence of success) nor reset (no evidence of failure).
+This prevents premature convergence and also avoids resetting a hard-won streak
+just because CI hasn't finished yet.
+
+```bash
+echo "⏳ CI still running — holding at $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
+# Optional: run the CI completion polling helper below to wait this out
+```
+
+Then **return to Phase 1**.
 
 #### ❌ Problems found
 
@@ -196,6 +241,10 @@ gh pr view $PR_NUMBER --comments
 
 Read the requested changes → fix the code → commit and push.
 Do **not** automatically `re-request-review`; leave that to the human.
+
+Once a fix commit is pushed, the CR is considered superseded by the timestamp
+filter above and will not be re-detected on the next iteration. If the reviewer
+submits a fresh CR after our fix, it will surface again (correctly).
 
 ### Phase 4: Post-fix wait
 
