@@ -23,6 +23,39 @@ All subsequent user-facing output (logs, notifications, commit message bodies,
 review replies, progress reports) must be translated to `$LANG_CODE` at
 runtime.
 
+## Step 0.5: Pre-flight — verify required dependencies
+
+Before invoking any external slash command in Steps 1–3, verify that each
+required skill is loaded in the current Claude Code session. The chain
+invokes these by name:
+
+| Required slash command | Provided by | How to install |
+|------------------------|-------------|----------------|
+| `/simplify` | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
+| `/commit-commands:commit-push-pr` | `commit-commands` plugin | `/plugin install commit-commands` |
+| `/code-review:code-review` | `code-review` plugin | `/plugin install code-review` |
+
+Consult the **available skills list** (visible in this session's
+system-reminder messages, or via `/help`) to confirm each command is loaded.
+If **any** of them is missing, do **not** proceed — Claude Code will reject
+the invocation mid-chain with an opaque "skill not found" error after partial
+work has been done. Instead, report exactly which ones are missing with the
+install hints from the table above, then abort:
+
+```
+⚠️ /forge:finalize cannot run — the following required plugins are not loaded:
+  • /commit-commands:commit-push-pr   →  /plugin install commit-commands
+  • /code-review:code-review          →  /plugin install code-review
+
+Install them, run /reload-plugins, then re-invoke /forge:finalize.
+```
+
+(Translate the message above to `$LANG_CODE`; keep the slash command names
+and install hints as-is — they are proper nouns.)
+
+`/forge:watch` for Step 4 is internal to forge itself — if `/forge:finalize`
+loaded, `/forge:watch` is also available, so no check needed there.
+
 ## Step 1: Simplify the code
 
 Invoke the slash command:
@@ -31,7 +64,10 @@ Invoke the slash command:
 /simplify
 ```
 
-Wait for it to finish. If it errors, report to the user and abort.
+Wait for it to finish. If it errors with "skill not found" (preflight should
+have caught this — this is a backstop), instruct the user that `/simplify`
+is normally a Claude Code bundled skill and may need to be re-enabled, then
+abort. For any other error, report it and abort.
 
 ## Step 2: Commit, push, and open a PR
 
@@ -41,7 +77,9 @@ Invoke the slash command:
 /commit-commands:commit-push-pr
 ```
 
-After it completes, capture the **PR number** and **PR URL** for later steps:
+If this fails with "skill not found" (preflight should have caught this —
+backstop), report `/plugin install commit-commands` and abort. After it
+completes, capture the **PR number** and **PR URL** for later steps:
 
 ```bash
 PR_NUMBER=$(gh pr view --json number --jq '.number')
@@ -60,6 +98,9 @@ Invoke:
 ```
 /code-review:code-review
 ```
+
+If this fails with "skill not found" (preflight should have caught this —
+backstop), report `/plugin install code-review` and abort.
 
 ### 3-2. Classify findings
 
