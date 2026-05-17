@@ -168,10 +168,11 @@ collapses raw check states into pass / fail / pending / skipping / cancel.
 gh pr checks "$PR_NUMBER" --json name,state,bucket
 ```
 
-Decision (based on `bucket`):
-- All `pass` (or `skipping`, e.g. NEUTRAL completion) → ✅
-- Any `pending` → ⏳ (wait and re-check; no fix needed)
-- Any `fail` or `cancel` → ❌ (needs fixing)
+Decision (based on `bucket`, **evaluated in this priority order — first match wins**):
+
+1. Any `fail` or `cancel` → ❌ (needs fixing; do **not** wait for pending checks to finish — a failure dominates regardless of other checks still running)
+2. Any `pending` (and no `fail` / `cancel`) → ⏳ (wait and re-check; no fix needed yet)
+3. All `pass` or `skipping` (e.g. NEUTRAL completion) → ✅
 
 ##### Open review threads
 
@@ -473,19 +474,22 @@ that to the human.
 
 **Ambiguous → ask clarification, do NOT push:**
 
-Post a comment on the PR (use `gh pr comment` or reply to the CR's body via
-`gh api repos/$REPO/pulls/$PR_NUMBER/reviews/<REVIEW_ID>/comments` if there's
-an inline anchor) asking a specific question. Do not push a commit, so the
-timestamp filter does NOT supersede the CR — it will continue to surface on
-each iteration. This is expected. Once the reviewer responds (re-submits or
+Post a top-level PR comment with `gh pr comment "$PR_NUMBER" --body "..."`
+asking a specific clarifying question. Do not push a commit, so the timestamp
+filter does NOT supersede the CR — it will continue to surface on each
+iteration. This is expected. Once the reviewer responds (re-submits or
 dismisses), the loop converges naturally.
+
+(Don't reach for `gh api repos/.../reviews/{id}/comments` — that REST endpoint
+is GET-only for listing review comments, not for posting.)
 
 **Invalid → reply with reasoning, do NOT push or auto-dismiss:**
 
-Post a reply explaining the disagreement, e.g. *"After review we believe
-this CR may not apply because <reason>. Could you confirm whether to dismiss
-or proceed?"* We intentionally never auto-dismiss other people's reviews, so
-the CR will persist. On subsequent iterations the loop will continue to
+Post a top-level PR comment with `gh pr comment "$PR_NUMBER" --body "..."`
+explaining the disagreement, e.g. *"After review we believe this CR may not
+apply because <reason>. Could you confirm whether to dismiss or proceed?"*
+We intentionally never auto-dismiss other people's reviews, so the CR will
+persist. On subsequent iterations the loop will continue to
 detect it (the timestamp filter only supersedes via *fix* commits, not via
 comments). Eventually either:
 
