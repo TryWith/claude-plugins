@@ -1,0 +1,15 @@
+{
+  "name": "trywith",
+  "owner": {
+    "name": "TryWith Inc.",
+    "email": "info@trywith.co.jp",
+    "url": "https://trywith.co.jp"
+  },
+  "plugins": [
+    {
+      "name": "forge",
+      "source": "./plugins/forge",
+      "description": "Orchestrates existing commands and watches CI / reviews after PR creation, auto-fixing until everything is green."
+    }
+  ]
+}
