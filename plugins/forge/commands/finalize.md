@@ -1,5 +1,5 @@
 ---
-description: Run the full post-implementation workflow — simplify, commit, push, PR, self-review loop, CI/review watch, and notify on completion.
+description: Run the full post-implementation workflow — commit, push, PR, self-review loop, CI/review watch, and notify on completion.
 ---
 
 # /forge:finalize
@@ -25,15 +25,14 @@ runtime.
 
 ## Step 0.5: Pre-flight — verify required dependencies
 
-Before invoking any external slash command in Steps 1–3, verify that each
+Before invoking any external slash command in Steps 1–2, verify that each
 required skill is loaded in the current Claude Code session. The chain
 invokes these by name:
 
 | Required slash command | Provided by | How to install |
 |------------------------|-------------|----------------|
-| `/simplify` | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin | `/plugin install commit-commands` |
-| `/code-review:code-review` | `code-review` plugin | `/plugin install code-review` |
+| `/code-review` | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
 
 Consult the **available skills list** (visible in this session's
 system-reminder messages, or via `/help`) to confirm each command is loaded.
@@ -43,33 +42,19 @@ work has been done. Instead, report exactly which ones are missing with the
 install hints from the table above, then abort:
 
 ```
-⚠️ /forge:finalize cannot run — the following required plugins are not loaded:
+⚠️ /forge:finalize cannot run — the following required commands are missing:
   • /commit-commands:commit-push-pr   →  /plugin install commit-commands
-  • /code-review:code-review          →  /plugin install code-review
 
-Install them, run /reload-plugins, then re-invoke /forge:finalize.
+Install/enable the missing items, run /reload-plugins, then re-invoke /forge:finalize.
 ```
 
 (Translate the message above to `$LANG_CODE`; keep the slash command names
 and install hints as-is — they are proper nouns.)
 
-`/forge:watch` for Step 4 is internal to forge itself — if `/forge:finalize`
+`/forge:watch` for Step 3 is internal to forge itself — if `/forge:finalize`
 loaded, `/forge:watch` is also available, so no check needed there.
 
-## Step 1: Simplify the code
-
-Invoke the slash command:
-
-```
-/simplify
-```
-
-Wait for it to finish. If it errors with "skill not found" (preflight should
-have caught this — this is a backstop), instruct the user that `/simplify`
-is normally a Claude Code bundled skill and may need to be re-enabled, then
-abort. For any other error, report it and abort.
-
-## Step 2: Commit, push, and open a PR
+## Step 1: Commit, push, and open a PR
 
 Invoke the slash command:
 
@@ -87,22 +72,24 @@ PR_URL=$(gh pr view --json url --jq '.url')
 echo "📋 PR #$PR_NUMBER: $PR_URL"
 ```
 
-## Step 3: Self code-review and fix loop
+## Step 2: Self code-review and fix loop
 
 Repeat the following **until there are zero actionable findings**.
 
-### 3-1. Run the review
+### 2-1. Run the review
 
 Invoke:
 
 ```
-/code-review:code-review
+/code-review
 ```
 
 If this fails with "skill not found" (preflight should have caught this —
-backstop), report `/plugin install code-review` and abort.
+backstop), instruct the user that `/code-review` is normally a Claude Code
+bundled skill and may need to be re-enabled, then abort. For any other error,
+report it and abort.
 
-### 3-2. Classify findings
+### 2-2. Classify findings
 
 From the review output, bucket each finding:
 
@@ -112,7 +99,7 @@ From the review output, bucket each finding:
 | 🟡 Warning | Fix by default (skip only with a clear, stated reason) |
 | 🟢 Info | Fix at your discretion |
 
-### 3-3. Apply fixes
+### 2-3. Apply fixes
 
 Fix **every** 🔴 Critical and 🟡 Warning finding.
 
@@ -134,15 +121,15 @@ git push
 
 > Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
 
-### 3-4. Re-review
+### 2-4. Re-review
 
-After fixing, **return to 3-1 and re-run `/code-review:code-review`**.
+After fixing, **return to 2-1 and re-run `/code-review`**.
 Continue until either:
 
 - zero findings, **or**
 - only 🟢 Info findings remain and you judge them unnecessary to address.
 
-### 3-5. Loop exit conditions
+### 2-5. Loop exit conditions
 
 ```
 Maximum 10 iterations.
@@ -157,9 +144,9 @@ MAX_REVIEW_LOOP=10
 # At the start of each iteration: REVIEW_LOOP=$((REVIEW_LOOP + 1)) and check the cap
 ```
 
-Once findings are fully cleared, proceed to **Step 4**.
+Once findings are fully cleared, proceed to **Step 3**.
 
-## Step 4: PR watch loop & completion notification
+## Step 3: PR watch loop & completion notification
 
 Invoke the slash command:
 

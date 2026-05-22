@@ -21,9 +21,8 @@ The following commands must be available before use:
 
 | Command | Source |
 |---------|--------|
-| `/simplify` | Claude Code bundled skill |
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin |
-| `/code-review:code-review` | `code-review` plugin |
+| `/code-review` | Claude Code bundled skill |
 
 ### Usage
 
@@ -35,14 +34,13 @@ After finishing your implementation, run:
 
 It will automatically:
 
-1. `/simplify` — simplify the code
-2. `/commit-commands:commit-push-pr` — commit, push, open a PR
-3. `/code-review:code-review` — self-review and fix loop
-4. PR watch loop (5 min interval, exits after 2 consecutive clears)
+1. `/commit-commands:commit-push-pr` — commit, push, open a PR
+2. `/code-review` — self-review and fix loop
+3. PR watch loop (5 min interval, exits after 2 consecutive clears)
    - CI failure → auto-fix
    - Review comments → auto-respond
    - Changes Requested → auto-respond
-5. macOS desktop notification
+4. macOS desktop notification
 
 ### Commands
 
@@ -110,9 +108,8 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 | コマンド | 提供元 |
 |---------|--------|
-| `/simplify` | Claude Code 標準バンドルSkill |
 | `/commit-commands:commit-push-pr` | `commit-commands` Plugin |
-| `/code-review:code-review` | `code-review` Plugin |
+| `/code-review` | Claude Code 標準バンドルSkill |
 
 ### 使い方
 
@@ -124,14 +121,13 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 以下が自動で実行される:
 
-1. `/simplify` — コード簡素化
-2. `/commit-commands:commit-push-pr` — コミット・プッシュ・PR作成
-3. `/code-review:code-review` — 自己レビュー＆修正
-4. PR監視ループ（5分間隔・連続2回クリアで完了）
+1. `/commit-commands:commit-push-pr` — コミット・プッシュ・PR作成
+2. `/code-review` — 自己レビュー＆修正
+3. PR監視ループ（5分間隔・連続2回クリアで完了）
    - CI失敗 → 自動修正
    - レビューコメント → 自動対応
    - Changes Requested → 自動対応
-5. macOSデスクトップ通知
+4. macOSデスクトップ通知
 
 ### コマンド一覧
 
@@ -199,9 +195,8 @@ export FORGE_LANG=en
 
 | 命令 | 来源 |
 |------|------|
-| `/simplify` | Claude Code 内置 Skill |
 | `/commit-commands:commit-push-pr` | `commit-commands` 插件 |
-| `/code-review:code-review` | `code-review` 插件 |
+| `/code-review` | Claude Code 内置 Skill |
 
 ### 使用方法
 
@@ -213,14 +208,13 @@ export FORGE_LANG=en
 
 将自动执行:
 
-1. `/simplify` — 简化代码
-2. `/commit-commands:commit-push-pr` — 提交、推送、创建 PR
-3. `/code-review:code-review` — 自我评审与修复循环
-4. PR 监控循环（每 5 分钟一次，连续 2 次全部通过即结束）
+1. `/commit-commands:commit-push-pr` — 提交、推送、创建 PR
+2. `/code-review` — 自我评审与修复循环
+3. PR 监控循环（每 5 分钟一次，连续 2 次全部通过即结束）
    - CI 失败 → 自动修复
    - 评审评论 → 自动响应
    - Changes Requested → 自动响应
-5. macOS 桌面通知
+4. macOS 桌面通知
 
 ### 命令一览
 
