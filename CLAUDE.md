@@ -43,7 +43,7 @@ When editing command files:
 
 ### Two-level command composition
 
-`/forge:finalize` invokes other plugins by name: `/simplify` (bundled skill), `/commit-commands:commit-push-pr`, `/code-review:code-review`. These must be installed separately. If a user's environment uses different namespaces, the call sites in `finalize.md` need editing.
+`/forge:finalize` invokes other commands by name: `/commit-commands:commit-push-pr` (external plugin — must be installed separately) and `/code-review` (Claude Code bundled skill). If a user's environment uses different namespaces, the call sites in `finalize.md` need editing.
 
 ### READMEs are trilingual
 

@@ -307,7 +307,7 @@ a broken build is unambiguous.
 
 Score the **agreement with the reviewer's point** (not your confidence in your
 own counter-argument). Read the cited code carefully before scoring. The
-rubric is derived from `/code-review:code-review`'s 0-100 confidence scale,
+rubric is derived from `/code-review`'s 0-100 confidence scale,
 with the threshold split into three classes instead of `/code-review`'s
 single `< 80` filter — if you adjust one, keep the other deliberately
 aligned.
