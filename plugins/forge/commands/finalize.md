@@ -149,8 +149,11 @@ Inspect the full diff of the PR branch against its base:
 
 ```bash
 BASE_REF=$(gh pr view --json baseRefName --jq '.baseRefName')
-git diff "$BASE_REF"...HEAD --stat
-git diff "$BASE_REF"...HEAD
+# Use the remote-tracking base: a PR branch's local base (e.g. `main`) is often
+# stale or absent, which would make the three-dot diff key off the wrong
+# merge-base and skew the security-review trigger.
+git diff "origin/$BASE_REF"...HEAD --stat
+git diff "origin/$BASE_REF"...HEAD
 ```
 
 Run `/security-review` if the diff touches **any** security-relevant surface:
