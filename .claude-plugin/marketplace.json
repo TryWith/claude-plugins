@@ -9,7 +9,7 @@
     {
       "name": "forge",
       "source": "./plugins/forge",
-      "description": "Orchestrates existing commands and watches CI / reviews after PR creation, auto-fixing until everything is green."
+      "description": "Orchestrates commit / code-review --fix / conditional security-review and watches CI / reviews after PR creation, auto-fixing until everything is green."
     }
   ]
 }
