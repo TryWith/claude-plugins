@@ -25,22 +25,29 @@ runtime.
 
 ## Step 0.5: Pre-flight — verify required dependencies
 
-Before invoking any external slash command in Steps 1–4, verify that each
-required skill is loaded in the current Claude Code session. The chain
-invokes these by name:
+Before invoking any external slash command, verify that the skills it needs are
+loaded in the current Claude Code session, split by **when** they are needed:
+
+**Required — Steps 1–2 always run, so abort up front if either is missing:**
 
 | Required slash command | Provided by | How to install |
 |------------------------|-------------|----------------|
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin | `/plugin install commit-commands` |
 | `/code-review` (run with `--fix`) | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
-| `/security-review` (Step 3, conditional) | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
+
+**Conditional — Step 3 runs `/security-review` only when the diff is
+security-relevant, so do NOT abort up front for it:**
+
+| Conditional slash command | Provided by | How to install |
+|---------------------------|-------------|----------------|
+| `/security-review` | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
 
 Consult the **available skills list** (visible in this session's
 system-reminder messages, or via `/help`) to confirm each command is loaded.
-If **any** of them is missing, do **not** proceed — Claude Code will reject
-the invocation mid-chain with an opaque "skill not found" error after partial
-work has been done. Instead, report exactly which ones are missing with the
-install hints from the table above, then abort:
+If any of the **required** commands is missing, do **not** proceed — Claude
+Code will reject the invocation mid-chain with an opaque "skill not found"
+error after partial work has been done. Instead, report exactly which ones are
+missing with the install hints from the table above, then abort:
 
 ```
 ⚠️ /forge:finalize cannot run — the following required commands are missing:
@@ -51,6 +58,11 @@ Install/enable the missing items, run /reload-plugins, then re-invoke /forge:fin
 
 (Translate the message above to `$LANG_CODE`; keep the slash command names
 and install hints as-is — they are proper nouns.)
+
+A missing `/security-review` does **not** block startup — it is invoked only
+conditionally in Step 3. If Step 3 later finds the diff security-relevant but
+`/security-review` is unavailable, it warns and skips the security pass instead
+of aborting (commit / PR / watch are already done by then).
 
 `/forge:watch` for Step 4 is internal to forge itself — if `/forge:finalize`
 loaded, `/forge:watch` is also available, so no check needed there.
@@ -183,10 +195,12 @@ explicitly, and proceed to Step 4:
 /security-review
 ```
 
-If this fails with "skill not found" (preflight should have caught this —
-backstop), report that `/security-review` is a Claude Code bundled skill that
-may need re-enabling, then abort. `/security-review` is **read-only** — it
-reports vulnerabilities but does not apply fixes itself.
+If this fails with "skill not found", report that `/security-review` is a
+Claude Code bundled skill that may need re-enabling, then **skip the security
+pass and proceed to Step 4** — do **not** abort. Commit / PR / review / watch
+should still complete; the security pass is an optional, conditional add-on.
+`/security-review` is **read-only** — it reports vulnerabilities but does not
+apply fixes itself.
 
 ### 3-3. Triage findings by severity
 
