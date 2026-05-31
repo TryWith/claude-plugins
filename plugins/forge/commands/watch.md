@@ -120,6 +120,15 @@ BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
 MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
+STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
+
+# Cross-iteration state for the "neither red nor green" handling (Phase 2/3):
+#   - PENDING_STREAK: per-check count of consecutive pending iterations (stuck detection)
+#   - BLOCKED_NOTIFIED: space-joined set of awaiting-human check names already
+#     notified, so a long approval wait doesn't re-notify every 5 minutes.
+# Per-session only — every cron firing starts fresh and re-derives both.
+declare -A PENDING_STREAK
+BLOCKED_NOTIFIED=""
 
 # Result marker consumed by Section 3 (notification). Default to "aborted" so
 # any abnormal exit (cap hit, error, killed) produces an honest notification
@@ -165,14 +174,52 @@ echo "🔍 Iter $WATCH_ITER/$MAX_WATCH_ITER — checking ($(date '+%H:%M:%S'))"
 collapses raw check states into pass / fail / pending / skipping / cancel.
 
 ```bash
-gh pr checks "$PR_NUMBER" --json name,state,bucket
+gh pr checks "$PR_NUMBER" --json name,state,bucket,link
 ```
 
-Decision (based on `bucket`, **evaluated in this priority order — first match wins**):
+`bucket` collapses every check into pass / fail / pending / skipping / cancel —
+enough for the red/green decision, but it **hides the "neither red nor green,
+and won't move without a human" states**: a workflow run held at the "Approve
+and run" gate on a fork PR, an environment / deployment protection rule waiting
+for a required reviewer, or any check the Checks API reports as `waiting` /
+`action_required`. Those land in the `pending` (or `fail`) bucket and, left to
+the plain pending branch, would just burn iterations to the cap. Detect them
+explicitly so Phase 3 can **surface them to a human** instead of silently
+waiting or mis-routing an `action_required` check into the auto-fix path.
 
-1. Any `fail` or `cancel` → ❌ (needs fixing; do **not** wait for pending checks to finish — a failure dominates regardless of other checks still running)
-2. Any `pending` (and no `fail` / `cancel`) → ⏳ (wait and re-check; no fix needed yet)
-3. All `pass` or `skipping` (e.g. NEUTRAL completion) → ✅
+```bash
+# Raw check-run detail for the PR's head commit. status: queued|in_progress|
+# completed|waiting|requested|pending ; conclusion (when completed) includes
+# action_required. "Awaiting human" = status waiting/requested OR conclusion action_required.
+# Stream objects (not one array per page) so --paginate composes with jq -s below.
+HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
+BLOCKED_FROM_API=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" --paginate \
+  --jq '.check_runs[]
+        | select(.status == "waiting" or .status == "requested"
+                 or .conclusion == "action_required")
+        | {name, status, conclusion, link: .html_url}')
+
+# The same gate, when surfaced as a check, shows up in `gh pr checks` raw state
+# (ACTION_REQUIRED / WAITING / MANUAL). Union the two sources so neither misses it.
+BLOCKED_FROM_CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,link \
+  --jq '.[] | (.state | ascii_upcase) as $s
+        | select($s == "ACTION_REQUIRED" or $s == "WAITING" or $s == "MANUAL")
+        | {name, status: $s, conclusion: null, link}')
+
+BLOCKED_CHECKS=$(printf '%s\n%s\n' "$BLOCKED_FROM_API" "$BLOCKED_FROM_CHECKS" \
+  | jq -s 'unique_by(.name)')
+BLOCKED_COUNT=$(echo "$BLOCKED_CHECKS" | jq 'length')
+```
+
+Decision (**evaluated in this priority order — first match wins**). Exclude any
+check present in `BLOCKED_CHECKS` from the fail/pending evaluation, so an
+`action_required` check (which some `bucket` mappings fold into `fail`) is never
+mis-routed to the log-fetch auto-fix path:
+
+1. Any **non-blocked** `bucket` = `fail` or `cancel` → ❌ (needs fixing; a failure dominates other still-running checks — don't wait for them)
+2. `BLOCKED_COUNT` ≥ 1 → 🔔 (awaiting human action — surface, don't auto-fix; see Phase 3)
+3. Any **non-blocked** `bucket` = `pending` → ⏳ (wait and re-check; track for stuck detection)
+4. All remaining `bucket` = `pass` or `skipping` (e.g. NEUTRAL completion) → ✅
 
 ##### Open review threads
 
@@ -251,13 +298,14 @@ Decision:
 
 #### Phase 3: Decide and branch
 
-The decision tree maps Phase 2's three CI outcomes (✅ / ⏳ / ❌) plus thread and
-Changes Requested state to three Phase 3 branches:
+The decision tree maps Phase 2's four CI outcomes (✅ / 🔔 / ⏳ / ❌) plus thread
+and Changes Requested state to four Phase 3 branches:
 
 | CI | Threads / CR | Branch |
 |----|--------------|--------|
 | ✅ all pass | 0 / 0 | ✅ All clear (counter +1) |
-| ⏳ pending or in_progress | 0 / 0 | ⏳ Hold (counter unchanged) |
+| 🔔 awaiting human action | — | 🔔 Surface & hold (counter unchanged, notify once) |
+| ⏳ pending or in_progress | 0 / 0 | ⏳ Hold (counter unchanged, track stuck) |
 | ❌ failure, OR any threads, OR any active CR | — | ❌ Problems found (counter = 0, fix) |
 
 ##### ✅ All clear
@@ -277,6 +325,35 @@ fi
 | 1 | Keep looping (back to Phase 1) |
 | 2 | **Exit loop** (`break`) → notification (success) |
 
+##### 🔔 CI awaiting human action
+
+One or more checks are blocked on a human (`BLOCKED_COUNT` ≥ 1): a workflow
+approval gate, an environment protection reviewer, or any `waiting` /
+`action_required` check. These never clear on their own and there is nothing to
+auto-fix — waiting silently just burns iterations to the cap. So **notify the
+human once** (and again only when the blocked set changes), then hold exactly
+like pending: do **not** touch `CONSECUTIVE_CLEAR`. Once the human approves, the
+check resumes and the loop converges naturally on a later iteration.
+
+```bash
+BLOCKED_NAMES=$(echo "$BLOCKED_CHECKS" | jq -r '[.[].name] | sort | join(" ")')
+
+# Notify only when the blocked set differs from what we already told the user,
+# so a long approval wait doesn't fire a desktop notification every 5 minutes.
+if [ -n "$BLOCKED_NAMES" ] && [ "$BLOCKED_NAMES" != "$BLOCKED_NOTIFIED" ]; then
+  echo "🔔 CI awaiting human action — $BLOCKED_COUNT check(s) need approval:"
+  echo "$BLOCKED_CHECKS" | jq -r '.[] | "  • \(.name) [\(.conclusion // .status)] — \(.link)"'
+  osascript -e "display notification \"$BLOCKED_COUNT CI check(s) awaiting your approval — they won't proceed without you.\" \
+    with title \"Forge — PR #$PR_NUMBER needs approval\" \
+    sound name \"Funk\""
+  BLOCKED_NOTIFIED="$BLOCKED_NAMES"
+fi
+```
+
+(Translate the `echo` lines and the notification title/body to `$LANG_CODE`;
+keep emoji, check names, and URLs as-is.) Then **return to Phase 1** — keep
+watching so the loop converges the moment the gate is cleared.
+
 ##### ⏳ CI pending and no other issues
 
 If CI is still running but threads and Changes Requested are both empty,
@@ -290,7 +367,38 @@ echo "⏳ CI still running — holding at $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M')
 # Optional: run the CI completion polling helper below to wait this out
 ```
 
-Then **return to Phase 1**.
+A plain `pending` bucket is detail-blind: it cannot tell a check that is
+progressing from one that is hung or waiting on an external dependency the loop
+can't see. Track each check's consecutive-pending streak and surface any that
+crosses `STUCK_THRESHOLD`, so a silently-stalled check doesn't just ride the
+loop to the cap unnoticed.
+
+```bash
+PENDING_NOW=$(gh pr checks "$PR_NUMBER" --json name,bucket \
+  --jq '.[] | select(.bucket == "pending") | .name')
+
+declare -A SEEN_THIS_ITER=()
+while IFS= read -r c; do
+  [ -z "$c" ] && continue
+  SEEN_THIS_ITER["$c"]=1
+  PENDING_STREAK["$c"]=$(( ${PENDING_STREAK["$c"]:-0} + 1 ))
+  # Fire once, exactly when the streak crosses the threshold (not every iter after).
+  if [ "${PENDING_STREAK["$c"]}" -eq "$STUCK_THRESHOLD" ]; then
+    echo "⚠️ '$c' has stayed pending for $STUCK_THRESHOLD checks (~$((STUCK_THRESHOLD * 5)) min) — possibly stuck. Inspect it."
+    osascript -e "display notification \"CI check '$c' has been pending ~$((STUCK_THRESHOLD * 5)) min — possibly stuck.\" \
+      with title \"Forge — PR #$PR_NUMBER CI stuck?\" \
+      sound name \"Funk\""
+  fi
+done <<< "$PENDING_NOW"
+
+# Reset the streak for any check that is no longer pending (it moved on).
+for c in "${!PENDING_STREAK[@]}"; do
+  [ -z "${SEEN_THIS_ITER["$c"]:-}" ] && unset 'PENDING_STREAK[$c]'
+done
+```
+
+(Translate the `echo` / notification strings to `$LANG_CODE`; keep emoji and
+check names as-is.) Then **return to Phase 1**.
 
 ##### ❌ Problems found
 
@@ -552,6 +660,18 @@ done
 2:00:00 ⛔ Reached MAX_WATCH_ITER=24 → break → notify (aborted, "needs attention")
 ```
 
+#### Approval-gate path (neither red nor green — surfaced, then converges)
+
+```
+00:00  Watch start (initial check)
+00:00  🔔 Workflow awaiting "Approve and run" → notify human once → hold (counter=0)
+05:00  🔔 Still awaiting approval → same blocked set → no re-notify → hold
+…      (human approves on GitHub)
+20:00  ⏳ CI now running → hold
+25:00  ✅ All clear → counter=1
+30:00  ✅ All clear → counter=2 → 🎉 success notify
+```
+
 ---
 
 ## Section 3: Completion notification
@@ -634,9 +754,17 @@ above so the report reflects the current actual state.
 
 | Item              | State |
 |-------------------|-------|
-| CI checks         | <list any failing or pending check names; "all pass" if none> |
+| CI checks         | <list any failing / pending / awaiting-approval check names; "all pass" if none> |
 | Review threads    | <N> unresolved |
 | Changes Requested | <list reviewers with active CR; "none" if none> |
+
+If the abort coincided with `BLOCKED_COUNT` ≥ 1, call it out explicitly — a PR
+stalled on an approval gate looks identical to a hung CI from the cap alone:
+
+```
+🔔 CI checks awaiting human approval (loop cannot clear these itself):
+  • <check name> [<status>] — <URL>
+```
 
 ⚠️ The auto-fix loop reached MAX_WATCH_ITER iterations (or exited abnormally)
    without converging. Do NOT merge without manual review.
