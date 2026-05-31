@@ -40,6 +40,7 @@ It will automatically:
 3. `/security-review` — conditional: run only when the diff touches a security-relevant surface; Critical/High auto-fixed, Medium/Low deferred to you
 4. PR watch loop (5 min interval, exits after 2 consecutive clears)
    - CI failure → auto-fix
+   - CI awaiting approval / stuck → surface & notify (no silent waiting to the cap)
    - Review comments → auto-respond
    - Changes Requested → auto-respond
 5. macOS desktop notification
@@ -129,6 +130,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 3. `/security-review` — 条件付き実行: diff がセキュリティ関連箇所に触れる場合のみ。重大・大は自動修正、中・低はユーザーに判断依頼
 4. PR監視ループ（5分間隔・連続2回クリアで完了）
    - CI失敗 → 自動修正
+   - CI承認待ち・スタック → 検知して通知（cap まで黙って待ち続けない）
    - レビューコメント → 自動対応
    - Changes Requested → 自動対応
 5. macOSデスクトップ通知
@@ -218,6 +220,7 @@ export FORGE_LANG=en
 3. `/security-review` — 条件执行：仅当 diff 涉及安全相关部分时运行；严重/高自动修复，中/低交由用户判断
 4. PR 监控循环（每 5 分钟一次，连续 2 次全部通过即结束）
    - CI 失败 → 自动修复
+   - CI 等待审批 / 卡住 → 检测并通知（不再静默等待至上限）
    - 评审评论 → 自动响应
    - Changes Requested → 自动响应
 5. macOS 桌面通知
