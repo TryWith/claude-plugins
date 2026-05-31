@@ -122,13 +122,18 @@ WATCH_ITER=0
 MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
 
-# Cross-iteration state for the "neither red nor green" handling (Phase 2/3):
-#   - PENDING_STREAK: per-check count of consecutive pending iterations (stuck detection)
-#   - BLOCKED_NOTIFIED: space-joined set of awaiting-human check names already
-#     notified, so a long approval wait doesn't re-notify every 5 minutes.
-# Per-session only — every cron firing starts fresh and re-derives both.
-declare -A PENDING_STREAK
-BLOCKED_NOTIFIED=""
+# Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
+# Stored in PR-keyed temp files, NOT shell vars / associative arrays: each
+# iteration may run as a separate shell, so in-memory state wouldn't survive,
+# and macOS ships bash 3.2 which has no associative arrays. Mirrors the
+# WATCH_RESULT_FILE pattern above.
+#   - STREAK_FILE:   per-check pending streak, one "<count>\t<check name>" line each
+#   - NOTIFIED_FILE: space-joined set of awaiting-human check names last notified,
+#                    so a long approval wait doesn't re-notify every 5 minutes
+STREAK_FILE="${FORGE_STREAK_FILE:-/tmp/forge-pending-streak-$PR_NUMBER}"
+NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-/tmp/forge-blocked-notified-$PR_NUMBER}"
+: > "$STREAK_FILE"
+: > "$NOTIFIED_FILE"
 
 # Result marker consumed by Section 3 (notification). Default to "aborted" so
 # any abnormal exit (cap hit, error, killed) produces an honest notification
@@ -211,15 +216,30 @@ BLOCKED_CHECKS=$(printf '%s\n%s\n' "$BLOCKED_FROM_API" "$BLOCKED_FROM_CHECKS" \
 BLOCKED_COUNT=$(echo "$BLOCKED_CHECKS" | jq 'length')
 ```
 
-Decision (**evaluated in this priority order — first match wins**). Exclude any
-check present in `BLOCKED_CHECKS` from the fail/pending evaluation, so an
+Now derive the fail / pending counts **with the blocked checks removed**, so an
 `action_required` check (which some `bucket` mappings fold into `fail`) is never
-mis-routed to the log-fetch auto-fix path:
+counted as a failure and mis-routed to the log-fetch auto-fix path. `gh --jq`
+can't take `--argjson` (cli/cli#10263), so pipe to standalone `jq`:
 
-1. Any **non-blocked** `bucket` = `fail` or `cancel` → ❌ (needs fixing; a failure dominates other still-running checks — don't wait for them)
+```bash
+BLOCKED_NAME_SET=$(echo "$BLOCKED_CHECKS" | jq '[.[].name]')
+CI_RAW=$(gh pr checks "$PR_NUMBER" --json name,bucket)
+
+FAIL_CANCEL_COUNT=$(echo "$CI_RAW" | jq --argjson blocked "$BLOCKED_NAME_SET" '
+  [.[] | select(.name as $n | ($blocked | index($n)) | not)
+       | select(.bucket == "fail" or .bucket == "cancel")] | length')
+
+PENDING_COUNT=$(echo "$CI_RAW" | jq --argjson blocked "$BLOCKED_NAME_SET" '
+  [.[] | select(.name as $n | ($blocked | index($n)) | not)
+       | select(.bucket == "pending")] | length')
+```
+
+CI decision (**evaluated in this priority order — first match wins**):
+
+1. `FAIL_CANCEL_COUNT` ≥ 1 → ❌ (needs fixing; a failure dominates other still-running checks — don't wait for them)
 2. `BLOCKED_COUNT` ≥ 1 → 🔔 (awaiting human action — surface, don't auto-fix; see Phase 3)
-3. Any **non-blocked** `bucket` = `pending` → ⏳ (wait and re-check; track for stuck detection)
-4. All remaining `bucket` = `pass` or `skipping` (e.g. NEUTRAL completion) → ✅
+3. `PENDING_COUNT` ≥ 1 → ⏳ (wait and re-check; track for stuck detection)
+4. Otherwise (all remaining `pass` or `skipping`, e.g. NEUTRAL completion) → ✅
 
 ##### Open review threads
 
@@ -304,9 +324,14 @@ and Changes Requested state to four Phase 3 branches:
 | CI | Threads / CR | Branch |
 |----|--------------|--------|
 | ✅ all pass | 0 / 0 | ✅ All clear (counter +1) |
-| 🔔 awaiting human action | — | 🔔 Surface & hold (counter unchanged, notify once) |
+| 🔔 awaiting human action | 0 / 0 | 🔔 Surface & hold (counter unchanged, notify once) |
 | ⏳ pending or in_progress | 0 / 0 | ⏳ Hold (counter unchanged, track stuck) |
 | ❌ failure, OR any threads, OR any active CR | — | ❌ Problems found (counter = 0, fix) |
+
+Threads / CR are an **independently actionable axis**: any unresolved thread or
+active Changes Requested routes to ❌ **even when CI is 🔔 or ⏳** (those are
+things we can act on now, regardless of CI state). The 🔔 and ⏳ branches apply
+only when threads and CR are both clear — fix what's actionable first.
 
 ##### ✅ All clear
 
@@ -337,16 +362,19 @@ check resumes and the loop converges naturally on a later iteration.
 
 ```bash
 BLOCKED_NAMES=$(echo "$BLOCKED_CHECKS" | jq -r '[.[].name] | sort | join(" ")')
+PREV_NOTIFIED=$(cat "$NOTIFIED_FILE" 2>/dev/null)
 
 # Notify only when the blocked set differs from what we already told the user,
 # so a long approval wait doesn't fire a desktop notification every 5 minutes.
-if [ -n "$BLOCKED_NAMES" ] && [ "$BLOCKED_NAMES" != "$BLOCKED_NOTIFIED" ]; then
+# The osascript body interpolates only the numeric count and PR number — never a
+# raw check name — so a job named with a quote can't break the AppleScript literal.
+if [ -n "$BLOCKED_NAMES" ] && [ "$BLOCKED_NAMES" != "$PREV_NOTIFIED" ]; then
   echo "🔔 CI awaiting human action — $BLOCKED_COUNT check(s) need approval:"
   echo "$BLOCKED_CHECKS" | jq -r '.[] | "  • \(.name) [\(.conclusion // .status)] — \(.link)"'
-  osascript -e "display notification \"$BLOCKED_COUNT CI check(s) awaiting your approval — they won't proceed without you.\" \
+  osascript -e "display notification \"$BLOCKED_COUNT CI check(s) awaiting your approval — see terminal for which; they won't proceed without you.\" \
     with title \"Forge — PR #$PR_NUMBER needs approval\" \
     sound name \"Funk\""
-  BLOCKED_NOTIFIED="$BLOCKED_NAMES"
+  printf '%s' "$BLOCKED_NAMES" > "$NOTIFIED_FILE"
 fi
 ```
 
@@ -373,28 +401,35 @@ can't see. Track each check's consecutive-pending streak and surface any that
 crosses `STUCK_THRESHOLD`, so a silently-stalled check doesn't just ride the
 loop to the cap unnoticed.
 
+State lives in `$STREAK_FILE` (one `<count>\t<name>` line per check) — portable
+to bash 3.2 and durable across separate-shell iterations. Each pass rebuilds the
+file from the checks that are *still* pending, so any check that cleared is
+dropped and its streak naturally resets; names with spaces/parens survive
+because the name is the whole tab-delimited second field.
+
 ```bash
 PENDING_NOW=$(gh pr checks "$PR_NUMBER" --json name,bucket \
   --jq '.[] | select(.bucket == "pending") | .name')
 
-declare -A SEEN_THIS_ITER=()
-while IFS= read -r c; do
-  [ -z "$c" ] && continue
-  SEEN_THIS_ITER["$c"]=1
-  PENDING_STREAK["$c"]=$(( ${PENDING_STREAK["$c"]:-0} + 1 ))
+NEW_STREAK=""
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  prev=$(awk -F'\t' -v n="$name" '$2 == n { print $1; exit }' "$STREAK_FILE")
+  count=$(( ${prev:-0} + 1 ))
+  NEW_STREAK="${NEW_STREAK}${count}	${name}
+"
   # Fire once, exactly when the streak crosses the threshold (not every iter after).
-  if [ "${PENDING_STREAK["$c"]}" -eq "$STUCK_THRESHOLD" ]; then
-    echo "⚠️ '$c' has stayed pending for $STUCK_THRESHOLD checks (~$((STUCK_THRESHOLD * 5)) min) — possibly stuck. Inspect it."
-    osascript -e "display notification \"CI check '$c' has been pending ~$((STUCK_THRESHOLD * 5)) min — possibly stuck.\" \
+  # Keep the check name out of the AppleScript literal (injection-safe); the
+  # terminal echo carries the specifics.
+  if [ "$count" -eq "$STUCK_THRESHOLD" ]; then
+    echo "⚠️ '$name' has stayed pending for $STUCK_THRESHOLD checks (~$((STUCK_THRESHOLD * 5)) min) — possibly stuck. Inspect it."
+    osascript -e "display notification \"A CI check has been pending ~$((STUCK_THRESHOLD * 5)) min — possibly stuck; see terminal for which.\" \
       with title \"Forge — PR #$PR_NUMBER CI stuck?\" \
       sound name \"Funk\""
   fi
 done <<< "$PENDING_NOW"
 
-# Reset the streak for any check that is no longer pending (it moved on).
-for c in "${!PENDING_STREAK[@]}"; do
-  [ -z "${SEEN_THIS_ITER["$c"]:-}" ] && unset 'PENDING_STREAK[$c]'
-done
+printf '%s' "$NEW_STREAK" > "$STREAK_FILE"   # checks absent this pass drop out → streak reset
 ```
 
 (Translate the `echo` / notification strings to `$LANG_CODE`; keep emoji and
@@ -485,18 +520,20 @@ Handle by category:
 
 Scope the run lookup to this PR's branch — without `--branch`, `gh run list`
 returns runs from across all branches and the loop may analyse and "fix" an
-unrelated failure. Also match the full set of non-success conclusions that
-Phase 2's `cancel`/`fail` buckets cover (raw values: `failure`, `cancelled`,
-`timed_out`, `action_required`, `startup_failure`) — otherwise a cancelled or
+unrelated failure. Match the non-success conclusions Phase 2's `cancel`/`fail`
+buckets cover that are genuinely fixable from logs (raw values: `failure`,
+`cancelled`, `timed_out`, `startup_failure`) — otherwise a cancelled or
 timed-out run leaves `FAILED_RUN` empty, no fix is pushed, and the loop spins
 to `MAX_WATCH_ITER` resetting `CONSECUTIVE_CLEAR` on every iteration.
+`action_required` is deliberately **excluded** here: Phase 2 peels those runs
+into the 🔔 awaiting-human branch (they have no failure log to fix — they need a
+human to approve), so they never reach this fixer.
 
 ```bash
 FAILED_RUN=$(gh run list --branch "$BRANCH" --limit 5 --json databaseId,conclusion \
   --jq '.[] | select(.conclusion == "failure"
                       or .conclusion == "cancelled"
                       or .conclusion == "timed_out"
-                      or .conclusion == "action_required"
                       or .conclusion == "startup_failure") | .databaseId' | head -1)
 gh run view "$FAILED_RUN" --log-failed
 ```
@@ -758,12 +795,23 @@ above so the report reflects the current actual state.
 | Review threads    | <N> unresolved |
 | Changes Requested | <list reviewers with active CR; "none" if none> |
 
-If the abort coincided with `BLOCKED_COUNT` ≥ 1, call it out explicitly — a PR
-stalled on an approval gate looks identical to a hung CI from the cap alone:
+The abort breaks in Phase 1 (cap check) *before* Phase 2 runs that iteration, so
+the loop-local `BLOCKED_COUNT` is stale or unset here. **Recompute** the blocked
+set fresh by re-running Phase 2's awaiting-human detection (same queries), then,
+if any remain, call it out explicitly — a PR stalled on an approval gate looks
+identical to a hung CI from the cap alone:
 
-```
-🔔 CI checks awaiting human approval (loop cannot clear these itself):
-  • <check name> [<status>] — <URL>
+```bash
+HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
+BLOCKED_NOW=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" --paginate \
+  --jq '.check_runs[]
+        | select(.status == "waiting" or .status == "requested"
+                 or .conclusion == "action_required")
+        | {name, status, conclusion, link: .html_url}' \
+  | jq -s 'unique_by(.name)')
+[ "$(echo "$BLOCKED_NOW" | jq 'length')" -ge 1 ] && \
+  echo "$BLOCKED_NOW" | jq -r '"🔔 CI checks awaiting human approval (loop cannot clear these itself):",
+                               (.[] | "  • \(.name) [\(.conclusion // .status)] — \(.link)")'
 ```
 
 ⚠️ The auto-fix loop reached MAX_WATCH_ITER iterations (or exited abnormally)
@@ -774,5 +822,5 @@ stalled on an approval gate looks identical to a hung CI from the cap alone:
 ### Cleanup
 
 ```bash
-rm -f "$WATCH_RESULT_FILE"
+rm -f "$WATCH_RESULT_FILE" "$STREAK_FILE" "$NOTIFIED_FILE"
 ```
