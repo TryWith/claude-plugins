@@ -803,11 +803,18 @@ identical to a hung CI from the cap alone:
 
 ```bash
 HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
-BLOCKED_NOW=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" --paginate \
+# Union BOTH Phase 2 sources — the Checks API and gh pr checks raw state —
+# so a check detectable only via the second source isn't dropped from the report.
+BLOCKED_NOW_API=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" --paginate \
   --jq '.check_runs[]
         | select(.status == "waiting" or .status == "requested"
                  or .conclusion == "action_required")
-        | {name, status, conclusion, link: .html_url}' \
+        | {name, status, conclusion, link: .html_url}')
+BLOCKED_NOW_CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,link \
+  --jq '.[] | (.state | ascii_upcase) as $s
+        | select($s == "ACTION_REQUIRED" or $s == "WAITING" or $s == "MANUAL")
+        | {name, status: $s, conclusion: null, link}')
+BLOCKED_NOW=$(printf '%s\n%s\n' "$BLOCKED_NOW_API" "$BLOCKED_NOW_CHECKS" \
   | jq -s 'unique_by(.name)')
 [ "$(echo "$BLOCKED_NOW" | jq 'length')" -ge 1 ] && \
   echo "$BLOCKED_NOW" | jq -r '"🔔 CI checks awaiting human approval (loop cannot clear these itself):",
