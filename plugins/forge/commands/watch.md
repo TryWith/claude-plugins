@@ -409,7 +409,7 @@ because the name is the whole tab-delimited second field.
 
 ```bash
 PENDING_NOW=$(gh pr checks "$PR_NUMBER" --json name,bucket \
-  --jq '.[] | select(.bucket == "pending") | .name')
+  --jq '[.[] | select(.bucket == "pending") | .name] | unique | .[]')
 
 NEW_STREAK=""
 while IFS= read -r name; do
