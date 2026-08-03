@@ -28,12 +28,18 @@ runtime.
 Before invoking any external slash command, verify that the skills it needs are
 loaded in the current Claude Code session, split by **when** they are needed:
 
-**Required — Steps 1–2 always run, so abort up front if either is missing:**
+**Required — Step 1 always runs, so abort up front if it is missing:**
 
 | Required slash command | Provided by | How to install |
 |------------------------|-------------|----------------|
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin | `/plugin install commit-commands` |
-| `/code-review` (run with `--fix`) | Claude Code bundled skill | Built-in (only fails if the user disabled it) |
+
+**User-invoked — Step 2 hands control to the user; do NOT check for it here
+and do NOT abort if it looks unavailable:**
+
+| Slash command | Provided by | Note |
+|---------------|-------------|------|
+| `/code-review --fix` | Claude Code built-in | Since Claude Code 2.1.215 Claude can no longer launch `/code-review` on its own. Step 2 prompts the user to type it — see Step 2 for the full rationale. |
 
 **Conditional — Step 3 runs `/security-review` only when the diff is
 security-relevant, so do NOT abort up front for it:**
@@ -85,30 +91,58 @@ PR_URL=$(gh pr view --json url --jq '.url')
 echo "📋 PR #$PR_NUMBER: $PR_URL"
 ```
 
-## Step 2: Code-review auto-fix loop
+## Step 2: Code-review auto-fix loop (user-invoked)
 
-Run `/code-review --fix`, which finds issues **and applies the fixes to the
-working tree automatically**. Repeat until a run produces no further changes.
+`/code-review --fix` finds issues **and applies the fixes to the working tree
+automatically**. Repeat until a run produces no further changes.
 
-### 2-1. Run the review with auto-fix
+> **Claude cannot start this review itself — do not try.**
+> Since Claude Code 2.1.215 (*"Claude no longer runs the `/verify` and
+> `/code-review` skills on its own"*) the command is user-invocable only.
+> Both indirect routes are closed on purpose:
+> - `Skill(code-review)` → rejected with `disable-model-invocation`, with or
+>   without arguments (the gate is on the command, not its flags).
+> - `claude -p "/code-review --fix"` from Bash → blocked by the permission
+>   classifier.
+>
+> These are deliberate guards, not bugs. Do **not** work around them. Step 2
+> hands control back to the user for one keystroke per iteration instead.
+>
+> Note `code-review:code-review` (the marketplace plugin) *is* model-invocable,
+> but it is a **different command** — it posts a review comment on the PR and
+> never touches the working tree, so it cannot drive this loop. Do not
+> substitute it.
 
-Invoke:
+### 2-1. Ask the user to run the review
+
+Increment `REVIEW_LOOP` (initialised in 2-4) first so the counter below is
+accurate, then print the prompt and **stop and wait**:
 
 ```
-/code-review --fix
+⏳ Step 2 needs you — Claude cannot start a code review on its own.
+
+    Type:  /code-review --fix
+
+I'll pick the workflow back up automatically once it finishes.
+(PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>)
 ```
 
-If this fails with "skill not found" (preflight should have caught this —
-backstop), instruct the user that `/code-review` is normally a Claude Code
-bundled skill and may need to be re-enabled, then abort. For any other error,
-report it and abort.
+(Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+
+`/code-review` runs as a **background subagent** (Claude Code 2.1.218+), so it
+hands control back to the conversation before it has finished. Wait for its
+completion notification before inspecting the working tree — reading
+`git diff` mid-run sees a half-applied state.
 
 `--fix` applies fixes directly to the working tree. It does **not** commit or
 push — that's the next step.
 
+If the user declines to run it, **skip the rest of Step 2 and proceed to
+Step 3**, stating plainly that the code review was skipped at their request.
+
 ### 2-2. Commit and push the applied fixes
 
-Inspect what `--fix` changed:
+Once the review has reported completion, inspect what `--fix` changed:
 
 ```bash
 git diff --stat
@@ -130,8 +164,13 @@ git push
 
 ### 2-3. Re-review
 
-After committing, **return to 2-1 and re-run `/code-review --fix`**. A run that
-applies no further changes (clean working tree) is the convergence signal.
+After committing, **return to 2-1 and ask the user to run `/code-review --fix`
+again**. A run that applies no further changes (clean working tree) is the
+convergence signal.
+
+Each iteration costs the user one keystroke, so keep the re-prompt terse — it
+already carries the iteration counter — and never pad it with a recap of what
+was just fixed.
 
 ### 2-4. Loop exit conditions
 

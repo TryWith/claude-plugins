@@ -22,8 +22,13 @@ The following commands must be available before use:
 | Command | Source |
 |---------|--------|
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin |
-| `/code-review` (run with `--fix`) | Claude Code bundled skill |
+| `/code-review --fix` | Claude Code built-in — **you** run this one |
 | `/security-review` | Claude Code bundled skill |
+
+> **Why you run `/code-review` yourself:** Claude Code 2.1.215 made
+> `/code-review` user-invocable only — Claude can no longer start it, by design.
+> Step 2 pauses and asks you to type `/code-review --fix`, then resumes on its
+> own. Everything else stays automatic.
 
 ### Usage
 
@@ -33,10 +38,10 @@ After finishing your implementation, run:
 /forge:finalize
 ```
 
-It will automatically:
+It will then:
 
 1. `/commit-commands:commit-push-pr` — commit, push, open a PR
-2. `/code-review --fix` — auto-fix loop (fixes applied, committed, re-reviewed until clean)
+2. `/code-review --fix` — **you type this**; the applied fixes are then committed and re-reviewed until clean
 3. `/security-review` — conditional: run only when the diff touches a security-relevant surface; Critical/High auto-fixed, Medium/Low deferred to you
 4. PR watch loop (5 min interval, exits after 2 consecutive clears)
    - CI failure → auto-fix
@@ -112,8 +117,13 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 | コマンド | 提供元 |
 |---------|--------|
 | `/commit-commands:commit-push-pr` | `commit-commands` Plugin |
-| `/code-review`（`--fix` 付きで実行） | Claude Code 標準バンドルSkill |
+| `/code-review --fix` | Claude Code 組み込み — これだけ**ユーザーが実行** |
 | `/security-review` | Claude Code 標準バンドルSkill |
+
+> **`/code-review` だけ手動な理由:** Claude Code 2.1.215 で `/code-review` は
+> ユーザー起動専用になり、Claude 側からは起動できない仕様になった。Step 2 で
+> 一旦停止して `/code-review --fix` の入力を促し、完了後は自動で再開する。
+> それ以外は従来どおり全自動。
 
 ### 使い方
 
@@ -123,10 +133,10 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 /forge:finalize
 ```
 
-以下が自動で実行される:
+以下が実行される:
 
 1. `/commit-commands:commit-push-pr` — コミット・プッシュ・PR作成
-2. `/code-review --fix` — 自動修正ループ（修正適用・コミット・クリーンになるまで再レビュー）
+2. `/code-review --fix` — **ユーザーが入力**。適用された修正をコミットし、クリーンになるまで再レビュー
 3. `/security-review` — 条件付き実行: diff がセキュリティ関連箇所に触れる場合のみ。重大・大は自動修正、中・低はユーザーに判断依頼
 4. PR監視ループ（5分間隔・連続2回クリアで完了）
    - CI失敗 → 自動修正
@@ -202,8 +212,12 @@ export FORGE_LANG=en
 | 命令 | 来源 |
 |------|------|
 | `/commit-commands:commit-push-pr` | `commit-commands` 插件 |
-| `/code-review`（以 `--fix` 运行） | Claude Code 内置 Skill |
+| `/code-review --fix` | Claude Code 内置 — 仅此项由**用户**运行 |
 | `/security-review` | Claude Code 内置 Skill |
+
+> **为何 `/code-review` 需手动运行:** Claude Code 2.1.215 起 `/code-review`
+> 改为仅限用户调用，Claude 无法自行启动，此为有意设计。Step 2 会暂停并提示你
+> 输入 `/code-review --fix`，完成后自动恢复流程。其余步骤仍为全自动。
 
 ### 使用方法
 
@@ -213,10 +227,10 @@ export FORGE_LANG=en
 /forge:finalize
 ```
 
-将自动执行:
+将执行:
 
 1. `/commit-commands:commit-push-pr` — 提交、推送、创建 PR
-2. `/code-review --fix` — 自动修复循环（应用修复、提交、重新评审直至无问题）
+2. `/code-review --fix` — **由你输入**；随后自动提交所应用的修复并重新评审直至无问题
 3. `/security-review` — 条件执行：仅当 diff 涉及安全相关部分时运行；严重/高自动修复，中/低交由用户判断
 4. PR 监控循环（每 5 分钟一次，连续 2 次全部通过即结束）
    - CI 失败 → 自动修复
