@@ -100,7 +100,7 @@ automatically**. Repeat until a run produces no further changes.
 > touching the working tree, so the loop below would have nothing to converge
 > on — the parent would have to re-derive and re-apply every finding by hand.
 > `--fix` keeps the fixing inside the agent that already holds the review
-> context, and it runs the relevant checks after applying.
+> context.
 >
 > Call the **built-in** `code-review`. Never the plugin skill
 > `code-review:code-review` — see the note at the end of this section — and
@@ -124,18 +124,92 @@ automatically**. Repeat until a run produces no further changes.
 > comment on the PR and never touches the working tree, so it cannot drive this
 > loop. Do not substitute it.
 
-### 2-1. Start the review
+### 2-0. Initialise loop state
 
-Check the cap **before** starting anything: read `REVIEW_LOOP` (the state files
-are initialised once in 2-4) and, if it has already reached `MAX_REVIEW_LOOP`,
-do not start another review — go to 2-4.
-Otherwise increment it, snapshot the working tree so 2-2 can tell what this
-review changed, and start the review:
+Loop state lives in **PR-keyed temp files**, mirroring the pattern `watch.md`
+Section 2 uses: each Bash call runs in a fresh shell, so plain shell variables
+would reset every iteration — silently defeating both the cap and the
+stickiness rule in 2-1. That applies to the *paths* of those files as much as to
+the state inside them, so the paths (and the `PR_NUMBER` they are keyed on) get
+re-derived in every Step 2 Bash block, never carried over from Step 1.
+
+Run this block **once**, at the start of Step 2. It writes a small sourceable
+env file holding everything the later blocks need:
 
 ```bash
-REVIEW_LOOP=$(( $(cat "$REVIEW_LOOP_FILE") + 1 ))
-echo "$REVIEW_LOOP" > "$REVIEW_LOOP_FILE"
-git status --porcelain > "$REVIEW_TREE_FILE"   # pre-review baseline
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+
+# Quoted heredoc: nothing below is expanded now — it resolves when sourced,
+# against the $PR_NUMBER the sourcing block re-derived for itself.
+cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
+MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
+REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-/tmp/forge-review-loop-$PR_NUMBER}"
+REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-/tmp/forge-review-tree-$PR_NUMBER}"
+
+# Snapshot the working tree as one sorted "<path><TAB><content-hash>" line per
+# dirty-or-untracked path. Three details matter:
+#   -z            git C-quotes paths with spaces or non-ASCII bytes under plain
+#                 --porcelain ("\346\227\245...") and `git add` cannot consume
+#                 that form; -z emits raw paths.
+#   -uall         without it an untracked directory collapses to one "?? dir/"
+#                 entry, hiding new files added inside it.
+#   --no-renames  keeps every entry a single path, never "old -> new".
+# The content hash is what makes an edit to an *already dirty* path visible:
+# the porcelain status line alone is byte-identical before and after such an
+# edit, which would otherwise read as convergence and drop the fix on the floor.
+forge_snapshot() {
+  git status --porcelain -z -uall --no-renames \
+    | tr '\0' '\n' | cut -c4- \
+    | while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        printf '%s\t%s\n' "$p" "$(git hash-object -- "$p" 2>/dev/null || echo absent)"
+      done \
+    | LC_ALL=C sort -u
+}
+FORGE_ENV
+
+. "$REVIEW_ENV_FILE"
+echo 0 > "$REVIEW_LOOP_FILE"
+```
+
+Every later Step 2 Bash block opens with the same two-line preamble:
+
+```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+```
+
+`REVIEW_MODE` (`""` undecided → `auto` or `manual`) is the one piece of state
+that is *not* a shell value — it is a decision Claude carries in the
+conversation. 2-1 is the only place that sets it, and only the
+model-invocation-declined branch makes it stick.
+
+### 2-1. Start the review
+
+Check the cap **before** starting anything: if `REVIEW_LOOP` has already reached
+`MAX_REVIEW_LOOP`, do not start another review — go to **2-4**. Otherwise
+increment it, snapshot the working tree so 2-2 can tell what this review
+changed, and start the review:
+
+```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+
+# Default to the cap, not to 0: an unreadable counter must fail *closed*.
+# `$(( $(cat missing) + 1 ))` evaluates to 1 without erroring, which would pin
+# the counter at 1 forever and let the loop run unbounded.
+REVIEW_LOOP=$(cat "$REVIEW_LOOP_FILE" 2>/dev/null) || REVIEW_LOOP=""
+case "$REVIEW_LOOP" in ''|*[!0-9]*) REVIEW_LOOP="$MAX_REVIEW_LOOP" ;; esac
+
+if [ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]; then
+  echo "cap-reached"        # → 2-4 exit handling; do NOT start another review
+else
+  REVIEW_LOOP=$((REVIEW_LOOP + 1))
+  echo "$REVIEW_LOOP" > "$REVIEW_LOOP_FILE"
+  forge_snapshot > "$REVIEW_TREE_FILE"   # pre-review baseline
+  echo "iteration $REVIEW_LOOP/$MAX_REVIEW_LOOP"
+fi
 ```
 
 Then, unless `REVIEW_MODE` is already `manual`, start the review yourself by
@@ -227,33 +301,43 @@ scratch file from being mistaken for a review fix, committed under a
 never goes away:
 
 ```bash
-git status --porcelain > "$REVIEW_TREE_FILE.after"
-diff "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after"   # empty output = nothing changed
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+
+forge_snapshot > "$REVIEW_TREE_FILE.after"
+cmp -s "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" && echo "converged"
 ```
 
-If the two snapshots are **identical**, this review changed nothing — the loop
-has converged, so skip to 2-4. Otherwise stage exactly the paths that differ
-between the snapshots (not `git add .`, which would sweep unrelated dirt into
-the commit), then commit and push:
+If the two snapshots are **identical** (`converged`), this review changed
+nothing — the loop has converged, so skip to 2-4. Otherwise stage exactly the
+paths this review touched (not `git add .`, which would sweep unrelated dirt
+into the commit), then commit and push:
 
 ```bash
-# Stage only what this review touched.
-# Each diff line is "> XY path": 2 chars of diff prefix + 3 of porcelain status.
-diff "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" \
-  | grep '^>' | cut -c6- | while read -r path; do git add "$path"; done
+# Lines present in the after-snapshot but not the baseline = paths this review
+# created or whose content it changed. `git add -A --` so a path the review
+# deleted stages as a deletion. Paths that only *disappeared* from the snapshot
+# (the review reverted pre-existing dirt) are already back at HEAD — nothing to
+# stage for them, which is why only the added side is read.
+LC_ALL=C comm -13 "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" | cut -f1 \
+  | while IFS= read -r path; do git add -A -- "$path"; done
 
-git commit -m "fix: address code-review findings
+# A delta made purely of removals stages nothing — don't commit an empty change.
+if git diff --cached --quiet; then
+  echo "nothing staged"   # treat as a no-op iteration: skip the commit, go to 2-3
+else
+  git commit -m "fix: address code-review findings
 
 - <summarize the fixes --fix applied>
 "
-git push
+  git push
+fi
 ```
 
-A rename shows up as one porcelain line (`R  old -> new`); stage both paths
-when you see one.
-
-Summarize from the review's own returned report when it came back with one;
-otherwise derive the summary from `git diff --cached`. Never invent a summary.
+Fill in the `<summarize…>` placeholder before running the commit: use the
+review's own returned report when it came back with one, otherwise inspect the
+staged change with `git diff --cached` (i.e. after the `git add` loop, before
+`git commit`). Never invent a summary.
 
 > Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
 
@@ -271,9 +355,9 @@ with a recap of what was just fixed.
 ### 2-4. Loop exit conditions
 
 ```
-Maximum 10 review iterations.
-If /code-review --fix still applies changes after 10 iterations, report to the
-user and proceed to Step 3 — do not abort the run.
+Maximum $MAX_REVIEW_LOOP review iterations (default 10, override with FORGE_MAX_REVIEW_LOOP).
+If /code-review --fix still applies changes after that many iterations, report
+to the user and proceed to Step 3 — do not abort the run.
 ```
 
 Hitting the cap means the review is not converging, which is worth reporting —
@@ -281,23 +365,22 @@ but Step 1 has already pushed commits to an open PR, so abandoning the run here
 would leave that PR with no security pass and no watcher. Degrade to Step 3,
 the same way the user-declines path in 2-1 does.
 
-Loop state lives in **PR-keyed temp files**, mirroring the pattern `watch.md`
-Section 2 uses: each Bash call runs in a fresh shell, so plain shell variables
-would reset every iteration — silently defeating both the cap and the
-stickiness rule in 2-1.
+The counter itself is initialised once in **2-0** and incremented in 2-1 — this
+section is a loop-*exit* target only, so re-entering it must never re-run 2-0's
+init block.
 
-Run this block **once**, at the start of Step 2:
+### 2-5. Cleanup
+
+Whichever way Step 2 ends — convergence, cap, skip, or user decline — drop the
+state files before moving on, mirroring `watch.md`'s Cleanup section. Leaving
+them behind lets a later run on the same PR number read a stale baseline:
 
 ```bash
-MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
-REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-/tmp/forge-review-loop-$PR_NUMBER}"
-REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-/tmp/forge-review-tree-$PR_NUMBER}"
-echo 0 > "$REVIEW_LOOP_FILE"
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+[ -f "$REVIEW_ENV_FILE" ] && . "$REVIEW_ENV_FILE"
+rm -f "$REVIEW_LOOP_FILE" "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" "$REVIEW_ENV_FILE"
 ```
-
-`REVIEW_MODE` (`""` undecided → `auto` or `manual`) is a decision Claude carries
-in the conversation, not a shell value — 2-1 is the only place that sets it, and
-only the model-invocation-declined branch makes it stick.
 
 Once `/code-review --fix` converges (a review that changes nothing relative to
 its pre-review baseline), proceed to **Step 3**.

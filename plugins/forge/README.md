@@ -29,8 +29,9 @@ The following commands must be available before use:
 > feature gate, not a fixed property of your Claude Code version. Step 2 simply
 > tries — if the session allows it the review starts on its own; if the session
 > refuses it, Step 2 pauses and asks you to type `/code-review --fix` — once per
-> review iteration — then resumes automatically. Either way nothing else in the
-> workflow changes.
+> review iteration — then resumes automatically. If the command is not available
+> at all (not found or disabled), Step 2 is skipped with a warning. In every case
+> nothing else in the workflow changes.
 
 ### Usage
 
@@ -126,7 +127,8 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 > バージョンではなく**実行時のフィーチャーゲート**で決まる。Step 2 はまず起動を
 > 試み、許可されていればそのまま自動でレビューが走る。拒否された場合のみ一旦
 > 停止して `/code-review --fix` の入力を促し（レビュー1周ごとに1回）、完了後は
-> 自動で再開する。いずれの場合もそれ以外の挙動は変わらない。
+> 自動で再開する。コマンド自体が利用できない場合（未検出・無効化）は警告を出して
+> Step 2 をスキップする。いずれの場合もそれ以外の挙動は変わらない。
 
 ### 使い方
 
@@ -221,7 +223,8 @@ export FORGE_LANG=en
 > **关于 `/code-review`:** Claude 能否自行启动它，取决于**运行时的功能开关**，
 > 而非 Claude Code 的版本。Step 2 会先尝试启动：若当前会话允许，评审即自动运行；
 > 仅当被拒绝时才暂停并提示你输入 `/code-review --fix`（每轮评审各一次），完成后
-> 自动恢复流程。两种情况下其余步骤均不变。
+> 自动恢复流程。若该命令根本不可用（未找到或已禁用），则发出警告并跳过 Step 2。
+> 上述任一情况下其余步骤均不变。
 
 ### 使用方法
 
