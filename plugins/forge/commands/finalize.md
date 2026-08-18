@@ -96,11 +96,15 @@ echo "📋 PR #$PR_NUMBER: $PR_URL"
 `/code-review --fix` finds issues **and applies the fixes to the working tree
 automatically**. Repeat until a run produces no further changes.
 
-> **Always pass `--fix`.** Plain `/code-review` only reports its findings, and
-> it runs as a forked subagent whose findings do not reliably reach this
-> conversation — so the loop below would have nothing to converge on. `--fix`
-> keeps the fixing inside the agent that holds the review context, and it runs
-> the relevant checks after applying.
+> **Always pass `--fix`.** Plain `/code-review` reports findings without
+> touching the working tree, so the loop below would have nothing to converge
+> on — the parent would have to re-derive and re-apply every finding by hand.
+> `--fix` keeps the fixing inside the agent that already holds the review
+> context, and it runs the relevant checks after applying.
+>
+> Call the **built-in** `code-review`. Never the plugin skill
+> `code-review:code-review` — see the note at the end of this section — and
+> never retry a refused built-in call against the plugin as a substitute.
 
 > **Whether Claude may start this review is decided at runtime — attempt it,
 > never predict it.**
@@ -122,33 +126,62 @@ automatically**. Repeat until a run produces no further changes.
 
 ### 2-1. Start the review
 
-Increment `REVIEW_LOOP` (initialised in 2-4) first, then check it against
-`MAX_REVIEW_LOOP` — if the cap is already reached, stop per 2-4 instead of
-starting another review. Then, unless `REVIEW_MODE` is already `manual`, start
-the review yourself by calling the **`Skill` tool** (not by printing a slash
-command) with skill `code-review` and args `--fix`.
+Check the cap **before** starting anything: read `REVIEW_LOOP` (the state files
+are initialised once in 2-4) and, if it has already reached `MAX_REVIEW_LOOP`,
+do not start another review — go to 2-4.
+Otherwise increment it, snapshot the working tree so 2-2 can tell what this
+review changed, and start the review:
+
+```bash
+REVIEW_LOOP=$(( $(cat "$REVIEW_LOOP_FILE") + 1 ))
+echo "$REVIEW_LOOP" > "$REVIEW_LOOP_FILE"
+git status --porcelain > "$REVIEW_TREE_FILE"   # pre-review baseline
+```
+
+Then, unless `REVIEW_MODE` is already `manual`, start the review yourself by
+calling the **`Skill` tool** (not by printing a slash command) with skill
+`code-review` — the unprefixed built-in, never `code-review:code-review` — and
+args `--fix`.
 
 Branch on what comes back:
 
-- **It starts** → set `REVIEW_MODE=auto`, tell the user the review is running
-  (`🔭 Step 2: code review running automatically — PR #<PR_NUMBER> · iteration
-  <REVIEW_LOOP>/<MAX_REVIEW_LOOP>`), and continue to the completion wait below.
-  Nothing is asked of the user this iteration.
-- **It is refused** — the tool result declines model invocation (e.g. a
-  `disable-model-invocation` rejection) and tells you to ask the user to run
-  the command instead → set `REVIEW_MODE=manual`, print the prompt below, and
-  **stop and wait**.
-- **Anything else goes wrong** — the skill is not found, is disabled, or the
-  call errors out for any other reason → treat it exactly like a refusal: set
-  `REVIEW_MODE=manual` and print the prompt below. Step 0.5 deliberately does
-  not pre-flight this command, so 2-1 is the only place that can catch it, and
-  the manual route works regardless of why the automatic one did not.
+- **It starts** → set `REVIEW_MODE=auto`, tell the user the review is running,
+  and continue to the completion wait below. Nothing is asked of the user this
+  iteration.
 
-`REVIEW_MODE` is sticky for the whole of Step 2: once a refusal has put it in
-`manual`, later iterations go straight to the prompt without re-attempting the
-auto route — the retry is refused identically and only adds noise.
+  ```
+  🔭 Step 2: code review running automatically — PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>
+  ```
 
-Manual prompt (`REVIEW_MODE=manual` only):
+  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+
+- **Model invocation is declined** — the tool result refuses on
+  invocation-policy grounds (e.g. a `disable-model-invocation` rejection) and
+  tells you to ask the user to run the command instead → set
+  `REVIEW_MODE=manual`, print the prompt below, and **stop and wait**.
+
+  This is the **only** branch that makes `manual` sticky: the gate is fixed for
+  the session, so every later attempt is refused identically and re-trying just
+  adds noise. Later iterations go straight to the prompt.
+
+- **The command does not exist** — skill not found, or disabled by the user →
+  the manual route cannot help either, because the user typing
+  `/code-review --fix` hits the same missing command. Do **not** prompt. Warn
+  and **skip the rest of Step 2, proceeding to Step 3**, exactly as Step 3 does
+  for a missing `/security-review`:
+
+  ```
+  ⚠️ Step 2 skipped — /code-review is not available in this session (not found or disabled).
+  ```
+
+  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+
+- **Anything else goes wrong** — a transient tool error, a launch failure →
+  fall back to the manual prompt for *this* iteration only. Do **not** set
+  `REVIEW_MODE=manual`; a blip must not permanently downgrade a session whose
+  gate would have allowed the automatic route on the next pass.
+
+Manual prompt (used by the declined branch and the transient-error branch):
 
 ```
 ⏳ Step 2 needs you — this session does not let Claude start a code review.
@@ -161,15 +194,21 @@ I'll pick the workflow back up automatically once it finishes.
 
 (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
 
-**Waiting for completion.** `/code-review --fix` usually runs as a
-**background subagent** that hands control back to the conversation before it
-has finished. Whenever the run is backgrounded — in either mode — wait for its
-completion notification before inspecting the working tree; reading `git diff`
-mid-run sees a half-applied state. If instead the review completes inline and
-returns its result in the same turn (possible in `auto` mode, where the `Skill`
-tool may load the review into the current turn rather than backgrounding it),
-that returned result **is** the completion signal — go straight to 2-2. Do not
-sit waiting for a notification that will never arrive.
+**Waiting for completion.** `/code-review --fix` usually runs as a **background
+subagent** that hands control back to the conversation before it has finished.
+Whenever the run is backgrounded — in either mode — wait for its completion
+notification before inspecting the working tree; reading `git diff` mid-run
+sees a half-applied state. If instead the review completes inline and returns
+its result in the same turn, that returned result **is** the completion signal
+— go straight to 2-2. This applies to both modes: never sit waiting for a
+notification that will never arrive.
+
+**Confirm the review actually ran.** A review that errored, was cancelled, or
+hit a limit leaves the tree untouched — indistinguishable in 2-2 from a genuine
+convergence, which would silently advance an unreviewed PR toward merge. If the
+completion signal reports failure or cancellation rather than a finished
+review, treat it as the transient-error branch above (re-prompt / retry, and do
+not count it as convergence).
 
 `--fix` applies fixes directly to the working tree. It does **not** commit or
 push — that's the next step.
@@ -180,21 +219,29 @@ request.
 
 ### 2-2. Commit and push the applied fixes
 
-Once the review has reported completion, inspect what `--fix` changed:
+Once the review has reported completion, compare the tree against the baseline
+2-1 took **before** this review ran. Comparing against the baseline — rather
+than testing whether the tree is dirty — is what keeps a pre-existing untracked
+scratch file from being mistaken for a review fix, committed under a
+`fix: address code-review findings` message, and looping forever because it
+never goes away:
 
 ```bash
-# Convergence test — porcelain covers untracked and staged entries too.
-# `git diff --stat` alone would miss a brand-new file `--fix` created and
-# report a false convergence, leaving that file uncommitted.
-git status --porcelain
-git diff --stat          # human-readable summary of the tracked-file changes
+git status --porcelain > "$REVIEW_TREE_FILE.after"
+diff "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after"   # empty output = nothing changed
 ```
 
-If `git status --porcelain` prints **nothing** (no fixes were applied), the loop
-has converged — skip to 2-4. Otherwise commit and push:
+If the two snapshots are **identical**, this review changed nothing — the loop
+has converged, so skip to 2-4. Otherwise stage exactly the paths that differ
+between the snapshots (not `git add .`, which would sweep unrelated dirt into
+the commit), then commit and push:
 
 ```bash
-git add .
+# Stage only what this review touched.
+# Each diff line is "> XY path": 2 chars of diff prefix + 3 of porcelain status.
+diff "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" \
+  | grep '^>' | cut -c6- | while read -r path; do git add "$path"; done
+
 git commit -m "fix: address code-review findings
 
 - <summarize the fixes --fix applied>
@@ -202,13 +249,20 @@ git commit -m "fix: address code-review findings
 git push
 ```
 
+A rename shows up as one porcelain line (`R  old -> new`); stage both paths
+when you see one.
+
+Summarize from the review's own returned report when it came back with one;
+otherwise derive the summary from `git diff --cached`. Never invent a summary.
+
 > Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
 
 ### 2-3. Re-review
 
 After committing, **return to 2-1 and run `/code-review --fix` again** — via
-`Skill` in `auto` mode, via the prompt in `manual` mode. A run that applies no
-further changes (clean working tree) is the convergence signal.
+`Skill` in `auto` mode, via the prompt in `manual` mode. 2-1 takes a fresh
+baseline each pass, so the convergence signal is a review that leaves the tree
+identical to the baseline it started from.
 
 In `manual` mode each iteration costs the user one keystroke, so keep the
 re-prompt terse — it already carries the iteration counter — and never pad it
@@ -217,30 +271,36 @@ with a recap of what was just fixed.
 ### 2-4. Loop exit conditions
 
 ```
-Maximum 10 iterations.
-If /code-review --fix still applies changes after 10 iterations, report to the user and abort.
+Maximum 10 review iterations.
+If /code-review --fix still applies changes after 10 iterations, report to the
+user and proceed to Step 3 — do not abort the run.
 ```
 
-Track iteration count to prevent infinite loops, and carry the review mode
-across iterations:
+Hitting the cap means the review is not converging, which is worth reporting —
+but Step 1 has already pushed commits to an open PR, so abandoning the run here
+would leave that PR with no security pass and no watcher. Degrade to Step 3,
+the same way the user-declines path in 2-1 does.
+
+Loop state lives in **PR-keyed temp files**, mirroring the pattern `watch.md`
+Section 2 uses: each Bash call runs in a fresh shell, so plain shell variables
+would reset every iteration — silently defeating both the cap and the
+stickiness rule in 2-1.
+
+Run this block **once**, at the start of Step 2:
 
 ```bash
-REVIEW_LOOP=0
-MAX_REVIEW_LOOP=10
-REVIEW_MODE=""   # "" = undecided (try Skill), "auto" = Skill, "manual" = ask the user
-# At the start of each iteration: REVIEW_LOOP=$((REVIEW_LOOP + 1)) and check the cap
+MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
+REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-/tmp/forge-review-loop-$PR_NUMBER}"
+REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-/tmp/forge-review-tree-$PR_NUMBER}"
+echo 0 > "$REVIEW_LOOP_FILE"
 ```
 
-> **Run this block once, at the start of Step 2 — never again inside the loop.**
-> Each Bash call is a fresh shell, so these are conversation-level values Claude
-> carries across turns, not live shell state. Re-running the snippet each
-> iteration would reset `REVIEW_LOOP` to 0 (defeating the cap) and `REVIEW_MODE`
-> to `""` (defeating the stickiness in 2-1, re-attempting an already-refused
-> `Skill` call every iteration). If you ever need this state to survive in the
-> shell itself, use the PR-keyed temp-file pattern `watch.md` Section 2 uses for
-> exactly this reason.
+`REVIEW_MODE` (`""` undecided → `auto` or `manual`) is a decision Claude carries
+in the conversation, not a shell value — 2-1 is the only place that sets it, and
+only the model-invocation-declined branch makes it stick.
 
-Once `/code-review --fix` converges (a run that changes nothing), proceed to **Step 3**.
+Once `/code-review --fix` converges (a review that changes nothing relative to
+its pre-review baseline), proceed to **Step 3**.
 
 ## Step 3: Security review (conditional)
 
