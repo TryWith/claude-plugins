@@ -104,12 +104,11 @@ automatically**. Repeat until a run produces no further changes.
 
 > **Whether Claude may start this review is decided at runtime — attempt it,
 > never predict it.**
-> `/code-review` does not carry a fixed `disable-model-invocation` flag; the
+> `/code-review` does not carry a static `disable-model-invocation` flag; the
 > built-in resolves it through a **runtime feature gate**, so the very same
 > Claude Code build permits model invocation in some sessions and refuses it in
-> others. Version sniffing is therefore useless — 2.1.215 disabled it, later
-> builds re-enable it per gate. Step 2 makes the call and branches on the
-> actual result.
+> others. Never branch on the Claude Code version — it does not predict the
+> gate. Step 2 makes the call and branches on the actual result.
 >
 > If the attempt **is** refused, that refusal is a deliberate guard, not a bug.
 > Fall back to the manual prompt in 2-1; do **not** route around it via
@@ -123,21 +122,27 @@ automatically**. Repeat until a run produces no further changes.
 
 ### 2-1. Start the review
 
-Increment `REVIEW_LOOP` (initialised in 2-4) first so the counter below is
-accurate. Then, unless `REVIEW_MODE` is already `manual`, start the review
-yourself:
-
-```
-Skill(code-review, args="--fix")
-```
+Increment `REVIEW_LOOP` (initialised in 2-4) first, then check it against
+`MAX_REVIEW_LOOP` — if the cap is already reached, stop per 2-4 instead of
+starting another review. Then, unless `REVIEW_MODE` is already `manual`, start
+the review yourself by calling the **`Skill` tool** (not by printing a slash
+command) with skill `code-review` and args `--fix`.
 
 Branch on what comes back:
 
-- **It starts** → set `REVIEW_MODE=auto` and continue to the completion wait
-  below. Nothing is asked of the user this iteration.
-- **It is refused** with `disable-model-invocation` (the tool result tells you
-  to ask the user to run the command instead) → set `REVIEW_MODE=manual`, print
-  the prompt below, and **stop and wait**.
+- **It starts** → set `REVIEW_MODE=auto`, tell the user the review is running
+  (`🔭 Step 2: code review running automatically — PR #<PR_NUMBER> · iteration
+  <REVIEW_LOOP>/<MAX_REVIEW_LOOP>`), and continue to the completion wait below.
+  Nothing is asked of the user this iteration.
+- **It is refused** — the tool result declines model invocation (e.g. a
+  `disable-model-invocation` rejection) and tells you to ask the user to run
+  the command instead → set `REVIEW_MODE=manual`, print the prompt below, and
+  **stop and wait**.
+- **Anything else goes wrong** — the skill is not found, is disabled, or the
+  call errors out for any other reason → treat it exactly like a refusal: set
+  `REVIEW_MODE=manual` and print the prompt below. Step 0.5 deliberately does
+  not pre-flight this command, so 2-1 is the only place that can catch it, and
+  the manual route works regardless of why the automatic one did not.
 
 `REVIEW_MODE` is sticky for the whole of Step 2: once a refusal has put it in
 `manual`, later iterations go straight to the prompt without re-attempting the
@@ -156,10 +161,15 @@ I'll pick the workflow back up automatically once it finishes.
 
 (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
 
-**In both modes** `/code-review` runs as a **background subagent** (Claude Code
-2.1.218+), so it hands control back to the conversation before it has finished.
-Wait for its completion notification before inspecting the working tree —
-reading `git diff` mid-run sees a half-applied state.
+**Waiting for completion.** `/code-review --fix` usually runs as a
+**background subagent** that hands control back to the conversation before it
+has finished. Whenever the run is backgrounded — in either mode — wait for its
+completion notification before inspecting the working tree; reading `git diff`
+mid-run sees a half-applied state. If instead the review completes inline and
+returns its result in the same turn (possible in `auto` mode, where the `Skill`
+tool may load the review into the current turn rather than backgrounding it),
+that returned result **is** the completion signal — go straight to 2-2. Do not
+sit waiting for a notification that will never arrive.
 
 `--fix` applies fixes directly to the working tree. It does **not** commit or
 push — that's the next step.
@@ -173,11 +183,15 @@ request.
 Once the review has reported completion, inspect what `--fix` changed:
 
 ```bash
-git diff --stat
+# Convergence test — porcelain covers untracked and staged entries too.
+# `git diff --stat` alone would miss a brand-new file `--fix` created and
+# report a false convergence, leaving that file uncommitted.
+git status --porcelain
+git diff --stat          # human-readable summary of the tracked-file changes
 ```
 
-If the working tree is **clean** (no fixes were applied), the loop has
-converged — skip to 2-4. Otherwise commit and push:
+If `git status --porcelain` prints **nothing** (no fixes were applied), the loop
+has converged — skip to 2-4. Otherwise commit and push:
 
 ```bash
 git add .
@@ -216,6 +230,15 @@ MAX_REVIEW_LOOP=10
 REVIEW_MODE=""   # "" = undecided (try Skill), "auto" = Skill, "manual" = ask the user
 # At the start of each iteration: REVIEW_LOOP=$((REVIEW_LOOP + 1)) and check the cap
 ```
+
+> **Run this block once, at the start of Step 2 — never again inside the loop.**
+> Each Bash call is a fresh shell, so these are conversation-level values Claude
+> carries across turns, not live shell state. Re-running the snippet each
+> iteration would reset `REVIEW_LOOP` to 0 (defeating the cap) and `REVIEW_MODE`
+> to `""` (defeating the stickiness in 2-1, re-attempting an already-refused
+> `Skill` call every iteration). If you ever need this state to survive in the
+> shell itself, use the PR-keyed temp-file pattern `watch.md` Section 2 uses for
+> exactly this reason.
 
 Once `/code-review --fix` converges (a run that changes nothing), proceed to **Step 3**.
 
