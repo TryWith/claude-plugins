@@ -34,12 +34,12 @@ loaded in the current Claude Code session, split by **when** they are needed:
 |------------------------|-------------|----------------|
 | `/commit-commands:commit-push-pr` | `commit-commands` plugin | `/plugin install commit-commands` |
 
-**User-invoked — Step 2 hands control to the user; do NOT check for it here
-and do NOT abort if it looks unavailable:**
+**Runtime-gated — Step 2 resolves this by attempting the call; do NOT check for
+it here and do NOT abort if it looks unavailable:**
 
 | Slash command | Provided by | Note |
 |---------------|-------------|------|
-| `/code-review --fix` | Claude Code built-in | Since Claude Code 2.1.215 Claude can no longer launch `/code-review` on its own. Step 2 prompts the user to type it — see Step 2 for the full rationale. |
+| `/code-review --fix` | Claude Code built-in | Whether Claude may launch it is a runtime feature gate, not a version fact. Step 2 tries it and falls back to prompting the user only if refused — see Step 2 for the full rationale. |
 
 **Conditional — Step 3 runs `/security-review` only when the diff is
 security-relevant, so do NOT abort up front for it:**
@@ -91,35 +91,62 @@ PR_URL=$(gh pr view --json url --jq '.url')
 echo "📋 PR #$PR_NUMBER: $PR_URL"
 ```
 
-## Step 2: Code-review auto-fix loop (user-invoked)
+## Step 2: Code-review auto-fix loop
 
 `/code-review --fix` finds issues **and applies the fixes to the working tree
 automatically**. Repeat until a run produces no further changes.
 
-> **Claude cannot start this review itself — do not try.**
-> Since Claude Code 2.1.215 (*"Claude no longer runs the `/verify` and
-> `/code-review` skills on its own"*) the command is user-invocable only.
-> Both indirect routes are closed on purpose:
-> - `Skill(code-review)` → rejected with `disable-model-invocation`, with or
->   without arguments (the gate is on the command, not its flags).
-> - `claude -p "/code-review --fix"` from Bash → blocked by the permission
->   classifier.
->
-> These are deliberate guards, not bugs. Do **not** work around them. Step 2
-> hands control back to the user for one keystroke per iteration instead.
->
-> Note `code-review:code-review` (the marketplace plugin) *is* model-invocable,
-> but it is a **different command** — it posts a review comment on the PR and
-> never touches the working tree, so it cannot drive this loop. Do not
-> substitute it.
+> **Always pass `--fix`.** Plain `/code-review` only reports its findings, and
+> it runs as a forked subagent whose findings do not reliably reach this
+> conversation — so the loop below would have nothing to converge on. `--fix`
+> keeps the fixing inside the agent that holds the review context, and it runs
+> the relevant checks after applying.
 
-### 2-1. Ask the user to run the review
+> **Whether Claude may start this review is decided at runtime — attempt it,
+> never predict it.**
+> `/code-review` does not carry a fixed `disable-model-invocation` flag; the
+> built-in resolves it through a **runtime feature gate**, so the very same
+> Claude Code build permits model invocation in some sessions and refuses it in
+> others. Version sniffing is therefore useless — 2.1.215 disabled it, later
+> builds re-enable it per gate. Step 2 makes the call and branches on the
+> actual result.
+>
+> If the attempt **is** refused, that refusal is a deliberate guard, not a bug.
+> Fall back to the manual prompt in 2-1; do **not** route around it via
+> `claude -p "/code-review --fix"` from Bash (the permission classifier blocks
+> that too, by design).
+>
+> Note `code-review:code-review` (the marketplace plugin) is always
+> model-invocable, but it is a **different command** — it posts a review
+> comment on the PR and never touches the working tree, so it cannot drive this
+> loop. Do not substitute it.
+
+### 2-1. Start the review
 
 Increment `REVIEW_LOOP` (initialised in 2-4) first so the counter below is
-accurate, then print the prompt and **stop and wait**:
+accurate. Then, unless `REVIEW_MODE` is already `manual`, start the review
+yourself:
 
 ```
-⏳ Step 2 needs you — Claude cannot start a code review on its own.
+Skill(code-review, args="--fix")
+```
+
+Branch on what comes back:
+
+- **It starts** → set `REVIEW_MODE=auto` and continue to the completion wait
+  below. Nothing is asked of the user this iteration.
+- **It is refused** with `disable-model-invocation` (the tool result tells you
+  to ask the user to run the command instead) → set `REVIEW_MODE=manual`, print
+  the prompt below, and **stop and wait**.
+
+`REVIEW_MODE` is sticky for the whole of Step 2: once a refusal has put it in
+`manual`, later iterations go straight to the prompt without re-attempting the
+auto route — the retry is refused identically and only adds noise.
+
+Manual prompt (`REVIEW_MODE=manual` only):
+
+```
+⏳ Step 2 needs you — this session does not let Claude start a code review.
 
     Type:  /code-review --fix
 
@@ -129,16 +156,17 @@ I'll pick the workflow back up automatically once it finishes.
 
 (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
 
-`/code-review` runs as a **background subagent** (Claude Code 2.1.218+), so it
-hands control back to the conversation before it has finished. Wait for its
-completion notification before inspecting the working tree — reading
-`git diff` mid-run sees a half-applied state.
+**In both modes** `/code-review` runs as a **background subagent** (Claude Code
+2.1.218+), so it hands control back to the conversation before it has finished.
+Wait for its completion notification before inspecting the working tree —
+reading `git diff` mid-run sees a half-applied state.
 
 `--fix` applies fixes directly to the working tree. It does **not** commit or
 push — that's the next step.
 
-If the user declines to run it, **skip the rest of Step 2 and proceed to
-Step 3**, stating plainly that the code review was skipped at their request.
+If the user declines to run it in `manual` mode, **skip the rest of Step 2 and
+proceed to Step 3**, stating plainly that the code review was skipped at their
+request.
 
 ### 2-2. Commit and push the applied fixes
 
@@ -164,13 +192,13 @@ git push
 
 ### 2-3. Re-review
 
-After committing, **return to 2-1 and ask the user to run `/code-review --fix`
-again**. A run that applies no further changes (clean working tree) is the
-convergence signal.
+After committing, **return to 2-1 and run `/code-review --fix` again** — via
+`Skill` in `auto` mode, via the prompt in `manual` mode. A run that applies no
+further changes (clean working tree) is the convergence signal.
 
-Each iteration costs the user one keystroke, so keep the re-prompt terse — it
-already carries the iteration counter — and never pad it with a recap of what
-was just fixed.
+In `manual` mode each iteration costs the user one keystroke, so keep the
+re-prompt terse — it already carries the iteration counter — and never pad it
+with a recap of what was just fixed.
 
 ### 2-4. Loop exit conditions
 
@@ -179,11 +207,13 @@ Maximum 10 iterations.
 If /code-review --fix still applies changes after 10 iterations, report to the user and abort.
 ```
 
-Track iteration count to prevent infinite loops:
+Track iteration count to prevent infinite loops, and carry the review mode
+across iterations:
 
 ```bash
 REVIEW_LOOP=0
 MAX_REVIEW_LOOP=10
+REVIEW_MODE=""   # "" = undecided (try Skill), "auto" = Skill, "manual" = ask the user
 # At the start of each iteration: REVIEW_LOOP=$((REVIEW_LOOP + 1)) and check the cap
 ```
 
