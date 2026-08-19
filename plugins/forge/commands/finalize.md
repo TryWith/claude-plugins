@@ -424,24 +424,46 @@ Stage exactly the paths this review (and your 2-4 fixes) touched — not
 `git add .`, which would sweep unrelated dirt into the commit — then commit and
 push:
 
+First, list what changed. This block only reads:
+
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
 . "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
-# Lines present in the after-snapshot but not the baseline = paths this review
-# created or whose content it changed. `git add -A --` so a path the review
-# deleted stages as a deletion. Paths that only *disappeared* from the snapshot
-# (the review reverted pre-existing dirt) are already back at HEAD — nothing to
-# stage for them, which is why only the added side is read.
 # Re-take the after-snapshot: 2-3 wrote it *before* 2-4 applied any Fix now
 # edits, so the copy on disk is stale here and would miss exactly those paths.
 # (The preamble above is what makes `forge_snapshot` and $REVIEW_TREE_FILE
-# exist at all — without it this block stages nothing and drops every fix.)
+# exist at all — without it this block sees nothing and drops every fix.)
 forge_snapshot > "$REVIEW_TREE_FILE.after"
 
-LC_ALL=C comm -13 "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" | cut -f1 \
-  | while IFS= read -r path; do git add -A -- "$path"; done
+# Lines present in the after-snapshot but not the baseline = paths this review
+# created or whose content it changed. Paths that only *disappeared* from the
+# snapshot (the review reverted pre-existing dirt) are already back at HEAD —
+# nothing to stage for them, which is why only the added side is read.
+LC_ALL=C comm -13 "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" | cut -f1
+```
 
+Then stage those paths by **naming them literally** in the next command, using
+`-A` so a path the review deleted stages as a deletion:
+
+```bash
+git add -A -- <path> [<path> …]
+```
+
+> **Do not pipe the list into `git add`.** A loop like
+> `… | while IFS= read -r p; do git add -A -- "$p"; done` is blocked: Claude
+> Code's permission classifier cannot resolve an argument that only exists at
+> runtime, so it sandboxes the call — and inside that sandbox `git` is not on
+> `PATH`. The failure surfaces as `command not found: git`, which looks like a
+> broken environment and is nothing of the kind, and it poisons the *rest* of
+> that Bash invocation: every later command in the same block, `git` or not,
+> fails the same way. Verified by reproduction: the identical loop with a
+> literal path runs fine, as does `git add` on a variable assigned literally in
+> the same shell — only a value arriving through the pipe trips it.
+
+Finally commit and push:
+
+```bash
 # A delta made purely of removals stages nothing — don't commit an empty change.
 if git diff --cached --quiet; then
   echo "nothing staged"   # treat as a no-op iteration: skip the commit, go to 2-6
@@ -456,7 +478,7 @@ fi
 
 Fill in the `<summarize…>` placeholder before running the commit: use the
 review's own returned report when it came back with one, otherwise inspect the
-staged change with `git diff --cached` (i.e. after the `git add` loop, before
+staged change with `git diff --cached` (i.e. after staging, before
 `git commit`). Note separately anything you applied yourself in 2-4, so the
 commit body distinguishes the review's fixes from your triage. Never invent a
 summary.
