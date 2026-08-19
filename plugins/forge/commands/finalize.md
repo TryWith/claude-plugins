@@ -127,8 +127,8 @@ automatically**. Repeat until a run produces no further changes.
 ### 2-1. Initialise loop state
 
 Loop state lives in **files under the repository's git directory**
-(`$(git rev-parse --git-dir)/forge/`): each Bash call runs in a fresh shell, so
-plain shell variables would reset every iteration — silently defeating both the
+(`$(git rev-parse --absolute-git-dir)/forge/`): each Bash call runs in a fresh
+shell, so plain shell variables would reset every iteration — silently defeating both the
 cap and the stickiness rule in 2-2. That applies to the *paths* of those files
 as much as to the state inside them, so the paths get re-derived in every Step 2
 Bash block, never carried over from Step 1.
@@ -138,9 +138,13 @@ Bash block, never carried over from Step 1.
 - **It is scoped to this repository by construction.** A `/tmp` path keyed on
   the PR number alone collides whenever two repositories run `/forge:finalize`
   on the same PR number — one clobbers the other's baseline. `git rev-parse
-  --git-dir` also resolves per *worktree* (a linked worktree gets
+  --absolute-git-dir` also resolves per *worktree* (a linked worktree gets
   `.git/worktrees/<name>`), which is exactly the right scope: one worktree, one
-  branch, one PR.
+  branch, one PR. Use `--absolute-git-dir`, never plain `--git-dir`: the latter
+  prints a *relative* `.git` when the shell's cwd happens to be the repository
+  root, and that relative string is what gets baked into `FORGE_STATE_DIR` when
+  the env file is sourced — so a block that `cd`s anywhere would then read and
+  write a different set of state files.
 - **`git status` cannot see it.** State kept anywhere inside the working tree
   would show up in `forge_snapshot` below and be mistaken for a change the
   review made. Everything under the git directory is invisible to
@@ -151,13 +155,13 @@ env file holding everything the later blocks need:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-mkdir -p "$(git rev-parse --git-dir)/forge"
-REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+mkdir -p "$(git rev-parse --absolute-git-dir)/forge"
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 # Quoted heredoc: nothing below is expanded now — it resolves when sourced,
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
-FORGE_STATE_DIR="$(git rev-parse --git-dir)/forge"
+FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
 REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
 REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
@@ -196,7 +200,7 @@ Every later Step 2 Bash block opens with the same two-line preamble:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 ```
 
 `REVIEW_MODE` (`""` undecided → `auto` or `manual`) is the one piece of state
@@ -213,7 +217,7 @@ changed, and start the review:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 # Default to the cap, not to 0: an unreadable counter must fail *closed*.
 # `$(( $(cat missing) + 1 ))` evaluates to 1 without erroring, which would pin
@@ -260,8 +264,9 @@ Branch on what comes back:
 - **The command does not exist** — skill not found, or disabled by the user →
   the manual route cannot help either, because the user typing
   `/code-review --fix` hits the same missing command. Do **not** prompt. Warn
-  and **skip the rest of Step 2, proceeding to Step 3**, exactly as Step 3 does
-  for a missing `/security-review`:
+  and **skip the review loop, then leave Step 2 through 2-8 and 2-9** (they are
+  the exit path, not part of the loop) and proceed to Step 3 — exactly as Step 3
+  does for a missing `/security-review`:
 
   ```
   ⚠️ Step 2 skipped — /code-review is not available in this session (not found or disabled).
@@ -310,9 +315,11 @@ not count it as convergence).
 `--fix` applies fixes directly to the working tree. It does **not** commit or
 push — that's the next step.
 
-If the user declines to run it in `manual` mode, **skip the rest of Step 2 and
-proceed to Step 3**, stating plainly that the code review was skipped at their
-request.
+If the user declines to run it in `manual` mode, **skip the review loop, leave
+Step 2 through 2-8 and 2-9, and proceed to Step 3**, stating plainly that the
+code review was skipped at their request. 2-8 and 2-9 are not part of the loop:
+skipping them would strand the deferred findings and leave stale state files for
+the next run on this PR to read as a baseline.
 
 ### 2-3. Judge the outcome
 
@@ -337,14 +344,21 @@ forever because it never goes away:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 forge_snapshot > "$REVIEW_TREE_FILE.after"
 cmp -s "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" && echo "no-tree-delta"
 
-# Record the findings count for the non-convergence check in 2-6.
+# Record the findings count for the non-convergence check in 2-6. Read the
+# iteration back from its file — 2-2's $REVIEW_LOOP was a shell value in a
+# different shell, so referencing it here would just write a blank column.
+REVIEW_LOOP=$(cat "$REVIEW_LOOP_FILE" 2>/dev/null || echo "?")
 echo "$REVIEW_LOOP <count of findings this review reported>" >> "$REVIEW_TREND_FILE"
 ```
+
+Substitute the `<count …>` placeholder with the actual number before running
+this block — exactly as you do for `<summarize…>` in 2-5. Left verbatim it
+writes the placeholder text into the trend file and 2-6's check reads garbage.
 
 Then act on the pair:
 
@@ -353,7 +367,7 @@ Then act on the pair:
 | empty | none | **Converged.** → 2-7 |
 | non-empty | some | Triage the unapplied ones in 2-4, then commit in 2-5 |
 | non-empty | none | Triage in 2-4. If nothing comes out as *Fix now*, → 2-7 — **never re-run the review hoping for a different answer**; it already declined to apply them |
-| empty | some | Something outside the review touched the tree. Commit in 2-5, and say so |
+| empty | some | Something outside the review touched the tree. Commit in 2-5, and say so — but **not** under `fix: address code-review findings`: the review found nothing, so use a subject that describes what actually changed |
 
 If the completion signal carries no findings list you can read, fall back to the
 tree delta alone and **state that you did**. Never infer an empty findings list
@@ -381,20 +395,28 @@ categories named above; "it would read a bit nicer" is a **Defer**. Silently
 agreeing with a skip is not an outcome — each finding gets one of the three.
 
 ```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
+
 # Append every Defer. The durable copy is the PR comment posted in 2-8; this
 # buffer only has to survive until then.
-printf '%s\t%s\t%s\n' "<file>:<line>" "deferred" "<one-line summary>" \
+printf '%s\t%s\n' "<file>:<line>" "<one-line summary>" \
   >> "$REVIEW_DEFERRED_FILE"
 ```
 
 A finding you classified **Defer** or **Reject** stays classified. If a later
 iteration reports it again, restate the recorded outcome and move on — do not
-re-litigate it. Without this rule the loop can ping-pong on one contested
-finding until the cap fires.
+re-litigate it, and do **not** append it to `$REVIEW_DEFERRED_FILE` a second
+time (the buffer is never deduplicated, so a re-append becomes a duplicate
+bullet in the 2-8 comment). Without this rule the loop can ping-pong on one
+contested finding until the cap fires.
 
 Anything in **Fix now** is applied and folded into the same commit as the
 review's own fixes, then goes back through 2-2 so the next review sees your
-edits too. **Never push a self-applied fix that no review has looked at.**
+edits too. **Step 2 must never exit with a self-applied fix that no review has
+looked at**: 2-5 pushes it, but 2-6 then re-reviews the pushed commit, so a
+*Fix now* always costs one more iteration — never take the 2-7 exit directly
+after applying one.
 
 ### 2-5. Commit and push the applied fixes
 
@@ -403,6 +425,9 @@ Stage exactly the paths this review (and your 2-4 fixes) touched — not
 push:
 
 ```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
+
 # Lines present in the after-snapshot but not the baseline = paths this review
 # created or whose content it changed. `git add -A --` so a path the review
 # deleted stages as a deletion. Paths that only *disappeared* from the snapshot
@@ -410,6 +435,8 @@ push:
 # stage for them, which is why only the added side is read.
 # Re-take the after-snapshot: 2-3 wrote it *before* 2-4 applied any Fix now
 # edits, so the copy on disk is stale here and would miss exactly those paths.
+# (The preamble above is what makes `forge_snapshot` and $REVIEW_TREE_FILE
+# exist at all — without it this block stages nothing and drops every fix.)
 forge_snapshot > "$REVIEW_TREE_FILE.after"
 
 LC_ALL=C comm -13 "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" | cut -f1 \
@@ -438,40 +465,49 @@ summary.
 
 ### 2-6. Re-review
 
-After committing, **return to 2-2 and run `/code-review --fix` again** — via
-`Skill` in `auto` mode, via the prompt in `manual` mode. 2-2 takes a fresh
-baseline each pass, so the convergence signal is a review that leaves the tree
-identical to the baseline it started from *and* reports no findings.
-
-In `manual` mode each iteration costs the user one keystroke, so keep the
-re-prompt terse — it already carries the iteration counter — and never pad it
-with a recap of what was just fixed.
-
-**Check that the loop is actually converging** before starting another pass.
-Each fix commit enlarges the diff the next review reads, so the findings count
-can climb rather than fall:
+**First, check that the loop is actually converging** — do this *before*
+returning to 2-2, not after. Each fix commit enlarges the diff the next review
+reads, so the findings count can climb rather than fall:
 
 ```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
+
 tail -3 "$REVIEW_TREND_FILE"
 ```
 
 If the count has not decreased across three consecutive iterations, say so,
 show the trend, and ask the user whether to continue. The cap will stop it
 eventually, but silently burning the remaining iterations is not a useful
-default.
+default. Fewer than three lines means the loop is too young to judge — proceed
+without asking.
+
+Then **return to 2-2 and run `/code-review --fix` again** — via `Skill` in
+`auto` mode, via the prompt in `manual` mode. 2-2 takes a fresh baseline each
+pass, so the convergence signal is a review that leaves the tree identical to
+the baseline it started from *and* reports no findings.
+
+In `manual` mode each iteration costs the user one keystroke, so keep the
+re-prompt terse — it already carries the iteration counter — and never pad it
+with a recap of what was just fixed.
 
 ### 2-7. Loop exit conditions
 
 ```
 Maximum $MAX_REVIEW_LOOP review iterations (default 10, override with FORGE_MAX_REVIEW_LOOP).
 If /code-review --fix still applies changes after that many iterations, report
-to the user and proceed to Step 3 — do not abort the run.
+to the user, run 2-8 and 2-9, then proceed to Step 3 — do not abort the run.
 ```
 
 Hitting the cap means the review is not converging, which is worth reporting —
 but Step 1 has already pushed commits to an open PR, so abandoning the run here
 would leave that PR with no security pass and no watcher. Degrade to Step 3,
 the same way the user-declines path in 2-2 does.
+
+**This section exits *through* 2-8 and 2-9, never around them.** Every arrow
+pointing at 2-7 — convergence, cap, "nothing came out as Fix now" — continues
+into 2-8 (post the deferred findings) and then 2-9 (drop the state files)
+before Step 3 begins.
 
 The counter itself is initialised once in **2-1** and incremented in 2-2 — this
 section is a loop-*exit* target only, so re-entering it must never re-run 2-1's
@@ -491,12 +527,16 @@ only if none exists:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/forge/review-env-$PR_NUMBER.sh}"
 [ -s "$REVIEW_DEFERRED_FILE" ] || exit 0        # nothing deferred — no comment
 
+# The marker is a machine key, NOT a user-facing string: it must stay byte-for-
+# byte identical across runs and languages or the next run cannot find this
+# comment and posts a duplicate. Never translate it. The heading on the next
+# line *is* user-facing — translate it to $LANG_CODE, emoji unchanged.
 MARKER='<!-- forge:deferred-findings -->'
 BODY="$MARKER"$'\n'"### ⏳ Deferred code-review findings"$'\n\n'"$(
-  while IFS=$'\t' read -r loc _ summary; do
+  while IFS=$'\t' read -r loc summary; do
     printf -- '- `%s` — %s\n' "$loc" "$summary"
   done < "$REVIEW_DEFERRED_FILE"
 )"
@@ -504,14 +544,23 @@ BODY="$MARKER"$'\n'"### ⏳ Deferred code-review findings"$'\n\n'"$(
 # `--edit-last` edits your most recent comment, whatever it is — not the one
 # carrying the marker. Only reuse it when your last comment *is* the deferred
 # one; otherwise post fresh rather than clobber something else forge said.
-ME=$(gh api user --jq '.login')
-LAST_MINE=$(gh pr view "$PR_NUMBER" --json comments \
-  --jq "[.comments[] | select(.author.login == \"$ME\")] | last | .body // empty")
+# Bail if the login cannot be resolved: an empty $ME matches no comment, which
+# would silently take the "post fresh" branch and add a duplicate every run.
+ME=$(gh api user --jq '.login') || ME=""
+if [ -z "$ME" ]; then
+  echo "cannot resolve gh login — skipping the deferred comment" >&2
+  exit 1
+fi
+# `gh --jq` takes one expression and has no `--arg`; pass the login through the
+# environment instead of interpolating it into the jq source.
+LAST_MINE=$(ME="$ME" gh pr view "$PR_NUMBER" --json comments \
+  --jq '[.comments[] | select(.author.login == env.ME)] | last | .body // empty')
 
 case "$LAST_MINE" in
-  *"$MARKER"*) gh pr comment "$PR_NUMBER" --edit-last --body "$BODY" ;;
-  *)           gh pr comment "$PR_NUMBER" --body "$BODY" ;;
+  *"$MARKER"*) COMMENT_URL=$(gh pr comment "$PR_NUMBER" --edit-last --body "$BODY") ;;
+  *)           COMMENT_URL=$(gh pr comment "$PR_NUMBER" --body "$BODY") ;;
 esac
+echo "$COMMENT_URL"   # Step 4 restates this link — keep it
 ```
 
 Also tell the user directly, in `$LANG_CODE` — a comment they have to go looking
@@ -521,9 +570,16 @@ for is not a report:
 ⏳ Step 2 deferred <N> finding(s) — posted to PR #<PR_NUMBER> for review.
 ```
 
-Carry the count forward yourself — like `REVIEW_MODE`, it is a value you hold in
-the conversation, not a file (2-9 deletes the buffer). Step 4 restates it, so a
-run that deferred anything never reports as unqualified success.
+(Translate to `$LANG_CODE`; keep the emoji and the PR reference as-is.)
+
+Carry the count **and the `$COMMENT_URL` the block printed** forward yourself —
+like `REVIEW_MODE`, they are values you hold in the conversation, not files (2-9
+deletes the buffer). Step 4 restates both, so a run that deferred anything never
+reports as unqualified success.
+
+If this block fails (no `gh` login, comment API error), say so and **still run
+2-9** — but keep the deferred list in the conversation and repeat it in Step 4,
+since nothing durable was written.
 
 ### 2-9. Cleanup
 
@@ -535,8 +591,17 @@ just delayed:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$FORGE_STATE_DIR/review-env-$PR_NUMBER.sh}"
+# Source it when it exists, but do not depend on it: a run interrupted before
+# 2-1 finished leaves the env file missing, and `rm -f ""` would silently clean
+# nothing while the stale loop counter and baseline stay behind.
 [ -f "$REVIEW_ENV_FILE" ] && . "$REVIEW_ENV_FILE"
+REVIEW_LOOP_FILE="${REVIEW_LOOP_FILE:-${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}}"
+REVIEW_TREE_FILE="${REVIEW_TREE_FILE:-${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}}"
+REVIEW_DEFERRED_FILE="${REVIEW_DEFERRED_FILE:-${FORGE_REVIEW_DEFERRED_FILE:-$FORGE_STATE_DIR/review-deferred-$PR_NUMBER}}"
+REVIEW_TREND_FILE="${REVIEW_TREND_FILE:-${FORGE_REVIEW_TREND_FILE:-$FORGE_STATE_DIR/review-trend-$PR_NUMBER}}"
+
 rm -f "$REVIEW_LOOP_FILE" "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" \
       "$REVIEW_DEFERRED_FILE" "$REVIEW_TREND_FILE" "$REVIEW_ENV_FILE"
 ```

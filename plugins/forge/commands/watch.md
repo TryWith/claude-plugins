@@ -129,16 +129,22 @@ STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters befor
 #
 # They live under the repository's git directory rather than /tmp. A /tmp path
 # keyed on the PR number alone collides whenever two repositories watch the same
-# PR number — one clobbers the other's streak counts. `git rev-parse --git-dir`
-# is repository-scoped by construction, and resolves per worktree (a linked
-# worktree gets .git/worktrees/<name>), which is the right granularity: one
-# worktree, one branch, one PR. Anything under the git directory is also
-# invisible to `git status`, so watch state can never be mistaken for a working
-# tree change. `finalize.md` Step 2 uses the same convention.
+# PR number — one clobbers the other's streak counts. `git rev-parse
+# --absolute-git-dir` is repository-scoped by construction, and resolves per
+# worktree (a linked worktree gets .git/worktrees/<name>), which is the right
+# granularity: one worktree, one branch, one PR. Anything under the git
+# directory is also invisible to `git status`, so watch state can never be
+# mistaken for a working tree change. Use `--absolute-git-dir`, not plain
+# `--git-dir`: the latter prints a relative `.git` at the repository root, which
+# would point somewhere else the moment a later block runs from another cwd.
+# `finalize.md` Step 2 uses the same convention.
+#
+# These three paths are re-derived, not carried over, by any later block that
+# needs them (Section 3 and Cleanup) — see the re-derive preamble there.
 #   - STREAK_FILE:   per-check pending streak, one "<count>\t<check name>" line each
 #   - NOTIFIED_FILE: space-joined set of awaiting-human check names last notified,
 #                    so a long approval wait doesn't re-notify every 5 minutes
-FORGE_STATE_DIR="$(git rev-parse --git-dir)/forge"
+FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 mkdir -p "$FORGE_STATE_DIR"
 STREAK_FILE="${FORGE_STREAK_FILE:-$FORGE_STATE_DIR/pending-streak-$PR_NUMBER}"
 NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMBER}"
@@ -734,6 +740,13 @@ in that case would be a false positive that could lead someone to merge a
 broken PR.
 
 ```bash
+# Re-derive, never carry over: this block may run in a shell that never saw the
+# Initialization block, and an unset $WATCH_RESULT_FILE would make `cat` read
+# nothing and report a false "aborted" on a run that actually succeeded.
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
+WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
+
 WATCH_RESULT=$(cat "$WATCH_RESULT_FILE" 2>/dev/null || echo "aborted")
 echo "🛰  Outcome: $WATCH_RESULT"
 ```
@@ -839,5 +852,12 @@ BLOCKED_NOW=$(printf '%s\n%s\n' "$BLOCKED_NOW_API" "$BLOCKED_NOW_CHECKS" \
 ### Cleanup
 
 ```bash
-rm -f "$WATCH_RESULT_FILE" "$STREAK_FILE" "$NOTIFIED_FILE"
+# Same re-derive as Section 3 — an unset path would make every `rm -f` a no-op
+# and leave stale streak counts for the next run on this PR to read.
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
+
+rm -f "${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}" \
+      "${FORGE_STREAK_FILE:-$FORGE_STATE_DIR/pending-streak-$PR_NUMBER}" \
+      "${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMBER}"
 ```
