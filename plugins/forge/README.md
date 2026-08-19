@@ -44,7 +44,7 @@ After finishing your implementation, run:
 It will then:
 
 1. `/commit-commands:commit-push-pr` — commit, push, open a PR
-2. `/code-review --fix` — started automatically when the session permits it, otherwise you are asked to type it once per review iteration; the applied fixes are then committed and re-reviewed until clean
+2. `/code-review --fix` — started automatically when the session permits it, otherwise you are asked to type it once per review iteration; the applied fixes are then committed and re-reviewed until clean. Findings the review reports but chooses **not** to fix are triaged rather than dropped: genuine defects are fixed and re-reviewed, out-of-scope ones are posted to the PR as a comment so they survive the run
 3. `/security-review` — conditional: run only when the diff touches a security-relevant surface; Critical/High auto-fixed, Medium/Low deferred to you
 4. PR watch loop (5 min interval, exits after 2 consecutive clears)
    - CI failure → auto-fix
@@ -141,7 +141,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 以下が実行される:
 
 1. `/commit-commands:commit-push-pr` — コミット・プッシュ・PR作成
-2. `/code-review --fix` — セッションが許可していれば自動起動、拒否された場合のみレビュー1周ごとに入力を依頼。適用された修正をコミットし、クリーンになるまで再レビュー
+2. `/code-review --fix` — セッションが許可していれば自動起動、拒否された場合のみレビュー1周ごとに入力を依頼。適用された修正をコミットし、クリーンになるまで再レビュー。レビューが報告したが**修正しなかった**指摘は捨てずに精査し、実際の欠陥は修正して再レビュー、スコープ外のものは PR コメントとして投稿してランを跨いで残す
 3. `/security-review` — 条件付き実行: diff がセキュリティ関連箇所に触れる場合のみ。重大・大は自動修正、中・低はユーザーに判断依頼
 4. PR監視ループ（5分間隔・連続2回クリアで完了）
    - CI失敗 → 自動修正
@@ -237,7 +237,7 @@ export FORGE_LANG=en
 将执行:
 
 1. `/commit-commands:commit-push-pr` — 提交、推送、创建 PR
-2. `/code-review --fix` — 会话允许时自动启动，被拒绝时才请你在每轮评审各输入一次；随后自动提交所应用的修复并重新评审直至无问题
+2. `/code-review --fix` — 会话允许时自动启动，被拒绝时才请你在每轮评审各输入一次；随后自动提交所应用的修复并重新评审直至无问题。评审报告了但**未修复**的问题不会被丢弃：确属缺陷的由 Claude 修复并重新评审，超出本次范围的则作为 PR 评论发布，从而在本次运行结束后仍然保留
 3. `/security-review` — 条件执行：仅当 diff 涉及安全相关部分时运行；严重/高自动修复，中/低交由用户判断
 4. PR 监控循环（每 5 分钟一次，连续 2 次全部通过即结束）
    - CI 失败 → 自动修复

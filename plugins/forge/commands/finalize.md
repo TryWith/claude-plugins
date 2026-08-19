@@ -115,7 +115,7 @@ automatically**. Repeat until a run produces no further changes.
 > gate. Step 2 makes the call and branches on the actual result.
 >
 > If the attempt **is** refused, that refusal is a deliberate guard, not a bug.
-> Fall back to the manual prompt in 2-1; do **not** route around it via
+> Fall back to the manual prompt in 2-2; do **not** route around it via
 > `claude -p "/code-review --fix"` from Bash (the permission classifier blocks
 > that too, by design).
 >
@@ -124,28 +124,47 @@ automatically**. Repeat until a run produces no further changes.
 > comment on the PR and never touches the working tree, so it cannot drive this
 > loop. Do not substitute it.
 
-### 2-0. Initialise loop state
+### 2-1. Initialise loop state
 
-Loop state lives in **PR-keyed temp files**, mirroring the pattern `watch.md`
-Section 2 uses: each Bash call runs in a fresh shell, so plain shell variables
-would reset every iteration — silently defeating both the cap and the
-stickiness rule in 2-1. That applies to the *paths* of those files as much as to
-the state inside them, so the paths (and the `PR_NUMBER` they are keyed on) get
-re-derived in every Step 2 Bash block, never carried over from Step 1.
+Loop state lives in **files under the repository's git directory**
+(`$(git rev-parse --git-dir)/forge/`): each Bash call runs in a fresh shell, so
+plain shell variables would reset every iteration — silently defeating both the
+cap and the stickiness rule in 2-2. That applies to the *paths* of those files
+as much as to the state inside them, so the paths get re-derived in every Step 2
+Bash block, never carried over from Step 1.
+
+`.git/forge/` rather than `/tmp/forge-*` for two reasons, both load-bearing:
+
+- **It is scoped to this repository by construction.** A `/tmp` path keyed on
+  the PR number alone collides whenever two repositories run `/forge:finalize`
+  on the same PR number — one clobbers the other's baseline. `git rev-parse
+  --git-dir` also resolves per *worktree* (a linked worktree gets
+  `.git/worktrees/<name>`), which is exactly the right scope: one worktree, one
+  branch, one PR.
+- **`git status` cannot see it.** State kept anywhere inside the working tree
+  would show up in `forge_snapshot` below and be mistaken for a change the
+  review made. Everything under the git directory is invisible to
+  `git status`, so the state and the change detection cannot interfere.
 
 Run this block **once**, at the start of Step 2. It writes a small sourceable
 env file holding everything the later blocks need:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+mkdir -p "$(git rev-parse --git-dir)/forge"
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 # Quoted heredoc: nothing below is expanded now — it resolves when sourced,
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
+FORGE_STATE_DIR="$(git rev-parse --git-dir)/forge"
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
-REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-/tmp/forge-review-loop-$PR_NUMBER}"
-REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-/tmp/forge-review-tree-$PR_NUMBER}"
+REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
+REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
+# Working buffers. The durable home for deferred findings is the PR comment
+# posted at the end of Step 2 — this file only carries them until then.
+REVIEW_DEFERRED_FILE="${FORGE_REVIEW_DEFERRED_FILE:-$FORGE_STATE_DIR/review-deferred-$PR_NUMBER}"
+REVIEW_TREND_FILE="${FORGE_REVIEW_TREND_FILE:-$FORGE_STATE_DIR/review-trend-$PR_NUMBER}"
 
 # Snapshot the working tree as one sorted "<path><TAB><content-hash>" line per
 # dirty-or-untracked path. Three details matter:
@@ -177,24 +196,24 @@ Every later Step 2 Bash block opens with the same two-line preamble:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
 ```
 
 `REVIEW_MODE` (`""` undecided → `auto` or `manual`) is the one piece of state
 that is *not* a shell value — it is a decision Claude carries in the
-conversation. 2-1 is the only place that sets it, and only the
+conversation. 2-2 is the only place that sets it, and only the
 model-invocation-declined branch makes it stick.
 
-### 2-1. Start the review
+### 2-2. Start the review
 
 Check the cap **before** starting anything: if `REVIEW_LOOP` has already reached
-`MAX_REVIEW_LOOP`, do not start another review — go to **2-4**. Otherwise
-increment it, snapshot the working tree so 2-2 can tell what this review
+`MAX_REVIEW_LOOP`, do not start another review — go to **2-7**. Otherwise
+increment it, snapshot the working tree so 2-3 can tell what this review
 changed, and start the review:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 # Default to the cap, not to 0: an unreadable counter must fail *closed*.
 # `$(( $(cat missing) + 1 ))` evaluates to 1 without erroring, which would pin
@@ -203,7 +222,7 @@ REVIEW_LOOP=$(cat "$REVIEW_LOOP_FILE" 2>/dev/null) || REVIEW_LOOP=""
 case "$REVIEW_LOOP" in ''|*[!0-9]*) REVIEW_LOOP="$MAX_REVIEW_LOOP" ;; esac
 
 if [ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]; then
-  echo "cap-reached"        # → 2-4 exit handling; do NOT start another review
+  echo "cap-reached"        # → 2-7 exit handling; do NOT start another review
 else
   REVIEW_LOOP=$((REVIEW_LOOP + 1))
   echo "$REVIEW_LOOP" > "$REVIEW_LOOP_FILE"
@@ -274,11 +293,15 @@ Whenever the run is backgrounded — in either mode — wait for its completion
 notification before inspecting the working tree; reading `git diff` mid-run
 sees a half-applied state. If instead the review completes inline and returns
 its result in the same turn, that returned result **is** the completion signal
-— go straight to 2-2. This applies to both modes: never sit waiting for a
+— go straight to 2-3. This applies to both modes: never sit waiting for a
 notification that will never arrive.
 
+**Keep the review's report.** 2-3 and 2-4 both need the findings it returned,
+not just the edits it made. Do not discard the completion result after reading
+whether it succeeded.
+
 **Confirm the review actually ran.** A review that errored, was cancelled, or
-hit a limit leaves the tree untouched — indistinguishable in 2-2 from a genuine
+hit a limit leaves the tree untouched — indistinguishable in 2-3 from a genuine
 convergence, which would silently advance an unreviewed PR toward merge. If the
 completion signal reports failure or cancellation rather than a finished
 review, treat it as the transient-error branch above (re-prompt / retry, and do
@@ -291,27 +314,93 @@ If the user declines to run it in `manual` mode, **skip the rest of Step 2 and
 proceed to Step 3**, stating plainly that the code review was skipped at their
 request.
 
-### 2-2. Commit and push the applied fixes
+### 2-3. Judge the outcome
 
-Once the review has reported completion, compare the tree against the baseline
-2-1 took **before** this review ran. Comparing against the baseline — rather
-than testing whether the tree is dirty — is what keeps a pre-existing untracked
-scratch file from being mistaken for a review fix, committed under a
-`fix: address code-review findings` message, and looping forever because it
-never goes away:
+Convergence is a property of what the review **found**, not of what it changed.
+Read both signals before deciding:
+
+1. **The review's own report** — the findings it returned with its completion
+   signal, and which of them it says it applied. An empty findings list is the
+   only thing that means "nothing left to fix".
+2. **The tree delta** — the baseline comparison below.
+
+`--fix` is instructed to skip findings it judges wrong or not worth fixing, so a
+review can report real findings and still leave the tree untouched. Treating
+that as convergence discards them silently; it is the case this step exists to
+catch.
+
+Compare against the baseline 2-2 took **before** this review ran. Comparing
+against a baseline — rather than testing whether the tree is dirty — is what
+keeps a pre-existing untracked scratch file from being mistaken for a review
+fix, committed under a `fix: address code-review findings` message, and looping
+forever because it never goes away:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-. "${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
 
 forge_snapshot > "$REVIEW_TREE_FILE.after"
-cmp -s "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" && echo "converged"
+cmp -s "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" && echo "no-tree-delta"
+
+# Record the findings count for the non-convergence check in 2-6.
+echo "$REVIEW_LOOP <count of findings this review reported>" >> "$REVIEW_TREND_FILE"
 ```
 
-If the two snapshots are **identical** (`converged`), this review changed
-nothing — the loop has converged, so skip to 2-4. Otherwise stage exactly the
-paths this review touched (not `git add .`, which would sweep unrelated dirt
-into the commit), then commit and push:
+Then act on the pair:
+
+| Findings | Tree delta | Do this |
+|----------|-----------|---------|
+| empty | none | **Converged.** → 2-7 |
+| non-empty | some | Triage the unapplied ones in 2-4, then commit in 2-5 |
+| non-empty | none | Triage in 2-4. If nothing comes out as *Fix now*, → 2-7 — **never re-run the review hoping for a different answer**; it already declined to apply them |
+| empty | some | Something outside the review touched the tree. Commit in 2-5, and say so |
+
+If the completion signal carries no findings list you can read, fall back to the
+tree delta alone and **state that you did**. Never infer an empty findings list
+from an unchanged tree — that is the exact inversion this step removes.
+
+### 2-4. Triage what the review did not apply
+
+`--fix` routinely leaves findings alone — in a converged run and a normal one
+alike. They are not noise to discard: the reviewer skipped them on its own
+narrow view of the diff, without the repo's conventions, the user's intent, or
+this conversation. You have all three.
+
+Give **every** unapplied finding exactly one outcome, in writing:
+
+- **Fix now** — a correctness or data-loss defect in this change set, or a
+  violation of a convention this repo documents (`CLAUDE.md`, an established
+  pattern in a sibling command). Apply it yourself.
+- **Defer** — real, but out of this PR's scope: it needs a decision, spans files
+  this PR does not touch, or would half-change a convention shared with another
+  command. Record it — deferring is not dropping.
+- **Reject** — wrong, or a false positive. One line of reason.
+
+Default to the reviewer's judgment. Override it to **Fix now** only for the two
+categories named above; "it would read a bit nicer" is a **Defer**. Silently
+agreeing with a skip is not an outcome — each finding gets one of the three.
+
+```bash
+# Append every Defer. The durable copy is the PR comment posted in 2-8; this
+# buffer only has to survive until then.
+printf '%s\t%s\t%s\n' "<file>:<line>" "deferred" "<one-line summary>" \
+  >> "$REVIEW_DEFERRED_FILE"
+```
+
+A finding you classified **Defer** or **Reject** stays classified. If a later
+iteration reports it again, restate the recorded outcome and move on — do not
+re-litigate it. Without this rule the loop can ping-pong on one contested
+finding until the cap fires.
+
+Anything in **Fix now** is applied and folded into the same commit as the
+review's own fixes, then goes back through 2-2 so the next review sees your
+edits too. **Never push a self-applied fix that no review has looked at.**
+
+### 2-5. Commit and push the applied fixes
+
+Stage exactly the paths this review (and your 2-4 fixes) touched — not
+`git add .`, which would sweep unrelated dirt into the commit — then commit and
+push:
 
 ```bash
 # Lines present in the after-snapshot but not the baseline = paths this review
@@ -319,12 +408,16 @@ into the commit), then commit and push:
 # deleted stages as a deletion. Paths that only *disappeared* from the snapshot
 # (the review reverted pre-existing dirt) are already back at HEAD — nothing to
 # stage for them, which is why only the added side is read.
+# Re-take the after-snapshot: 2-3 wrote it *before* 2-4 applied any Fix now
+# edits, so the copy on disk is stale here and would miss exactly those paths.
+forge_snapshot > "$REVIEW_TREE_FILE.after"
+
 LC_ALL=C comm -13 "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" | cut -f1 \
   | while IFS= read -r path; do git add -A -- "$path"; done
 
 # A delta made purely of removals stages nothing — don't commit an empty change.
 if git diff --cached --quiet; then
-  echo "nothing staged"   # treat as a no-op iteration: skip the commit, go to 2-3
+  echo "nothing staged"   # treat as a no-op iteration: skip the commit, go to 2-6
 else
   git commit -m "fix: address code-review findings
 
@@ -337,22 +430,37 @@ fi
 Fill in the `<summarize…>` placeholder before running the commit: use the
 review's own returned report when it came back with one, otherwise inspect the
 staged change with `git diff --cached` (i.e. after the `git add` loop, before
-`git commit`). Never invent a summary.
+`git commit`). Note separately anything you applied yourself in 2-4, so the
+commit body distinguishes the review's fixes from your triage. Never invent a
+summary.
 
 > Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
 
-### 2-3. Re-review
+### 2-6. Re-review
 
-After committing, **return to 2-1 and run `/code-review --fix` again** — via
-`Skill` in `auto` mode, via the prompt in `manual` mode. 2-1 takes a fresh
+After committing, **return to 2-2 and run `/code-review --fix` again** — via
+`Skill` in `auto` mode, via the prompt in `manual` mode. 2-2 takes a fresh
 baseline each pass, so the convergence signal is a review that leaves the tree
-identical to the baseline it started from.
+identical to the baseline it started from *and* reports no findings.
 
 In `manual` mode each iteration costs the user one keystroke, so keep the
 re-prompt terse — it already carries the iteration counter — and never pad it
 with a recap of what was just fixed.
 
-### 2-4. Loop exit conditions
+**Check that the loop is actually converging** before starting another pass.
+Each fix commit enlarges the diff the next review reads, so the findings count
+can climb rather than fall:
+
+```bash
+tail -3 "$REVIEW_TREND_FILE"
+```
+
+If the count has not decreased across three consecutive iterations, say so,
+show the trend, and ask the user whether to continue. The cap will stop it
+eventually, but silently burning the remaining iterations is not a useful
+default.
+
+### 2-7. Loop exit conditions
 
 ```
 Maximum $MAX_REVIEW_LOOP review iterations (default 10, override with FORGE_MAX_REVIEW_LOOP).
@@ -363,27 +471,78 @@ to the user and proceed to Step 3 — do not abort the run.
 Hitting the cap means the review is not converging, which is worth reporting —
 but Step 1 has already pushed commits to an open PR, so abandoning the run here
 would leave that PR with no security pass and no watcher. Degrade to Step 3,
-the same way the user-declines path in 2-1 does.
+the same way the user-declines path in 2-2 does.
 
-The counter itself is initialised once in **2-0** and incremented in 2-1 — this
-section is a loop-*exit* target only, so re-entering it must never re-run 2-0's
+The counter itself is initialised once in **2-1** and incremented in 2-2 — this
+section is a loop-*exit* target only, so re-entering it must never re-run 2-1's
 init block.
 
-### 2-5. Cleanup
+### 2-8. Record deferred findings on the PR
 
-Whichever way Step 2 ends — convergence, cap, skip, or user decline — drop the
-state files before moving on, mirroring `watch.md`'s Cleanup section. Leaving
-them behind lets a later run on the same PR number read a stale baseline:
+Every exit path from Step 2 comes through here — convergence, cap, skip, or user
+decline. Deferred findings are **decisions with a lifetime longer than this
+run**: someone reviewing the PR later is the audience. They therefore live on
+the PR itself, not in local state, which 2-9 is about to delete and which does
+not survive an interrupted run or a different machine.
+
+Post them as a **single comment, updated in place** rather than one comment per
+iteration. Find a previous forge comment by its marker and edit it; create it
+only if none exists:
 
 ```bash
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
-REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-/tmp/forge-review-env-$PR_NUMBER.sh}"
-[ -f "$REVIEW_ENV_FILE" ] && . "$REVIEW_ENV_FILE"
-rm -f "$REVIEW_LOOP_FILE" "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" "$REVIEW_ENV_FILE"
+. "${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+[ -s "$REVIEW_DEFERRED_FILE" ] || exit 0        # nothing deferred — no comment
+
+MARKER='<!-- forge:deferred-findings -->'
+BODY="$MARKER"$'\n'"### ⏳ Deferred code-review findings"$'\n\n'"$(
+  while IFS=$'\t' read -r loc _ summary; do
+    printf -- '- `%s` — %s\n' "$loc" "$summary"
+  done < "$REVIEW_DEFERRED_FILE"
+)"
+
+# `--edit-last` edits your most recent comment, whatever it is — not the one
+# carrying the marker. Only reuse it when your last comment *is* the deferred
+# one; otherwise post fresh rather than clobber something else forge said.
+ME=$(gh api user --jq '.login')
+LAST_MINE=$(gh pr view "$PR_NUMBER" --json comments \
+  --jq "[.comments[] | select(.author.login == \"$ME\")] | last | .body // empty")
+
+case "$LAST_MINE" in
+  *"$MARKER"*) gh pr comment "$PR_NUMBER" --edit-last --body "$BODY" ;;
+  *)           gh pr comment "$PR_NUMBER" --body "$BODY" ;;
+esac
 ```
 
-Once `/code-review --fix` converges (a review that changes nothing relative to
-its pre-review baseline), proceed to **Step 3**.
+Also tell the user directly, in `$LANG_CODE` — a comment they have to go looking
+for is not a report:
+
+```
+⏳ Step 2 deferred <N> finding(s) — posted to PR #<PR_NUMBER> for review.
+```
+
+Carry the count forward yourself — like `REVIEW_MODE`, it is a value you hold in
+the conversation, not a file (2-9 deletes the buffer). Step 4 restates it, so a
+run that deferred anything never reports as unqualified success.
+
+### 2-9. Cleanup
+
+Whichever way Step 2 ends, drop the state files before moving on, mirroring
+`watch.md`'s Cleanup section. Leaving them behind lets a later run on the same
+PR read a stale baseline. Run this **after** 2-8 — it deletes the deferred
+buffer, so posting the comment first is what makes deferring durable rather than
+just delayed:
+
+```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
+REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --git-dir)/forge/review-env-$PR_NUMBER.sh}"
+[ -f "$REVIEW_ENV_FILE" ] && . "$REVIEW_ENV_FILE"
+rm -f "$REVIEW_LOOP_FILE" "$REVIEW_TREE_FILE" "$REVIEW_TREE_FILE.after" \
+      "$REVIEW_DEFERRED_FILE" "$REVIEW_TREND_FILE" "$REVIEW_ENV_FILE"
+```
+
+Once `/code-review --fix` converges (a review that reports no findings and
+changes nothing relative to its pre-review baseline), proceed to **Step 3**.
 
 ## Step 3: Security review (conditional)
 
@@ -505,3 +664,8 @@ consecutive all-clear checks; watches CI / open review threads / Changes
 Requested) and, on exit, emits the completion notification (macOS desktop
 notification + final terminal summary). Success and aborted outcomes produce
 different notifications — see `watch.md` Section 3 for details.
+
+If Step 2 deferred any findings (2-8), restate the count and the PR comment link
+alongside that summary. `/forge:watch` reports on CI and reviews only; it knows
+nothing about the triage, so an otherwise-green run would read as unqualified
+success while real findings sit unaddressed on the PR.

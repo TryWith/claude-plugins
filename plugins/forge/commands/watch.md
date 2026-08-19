@@ -123,22 +123,32 @@ MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; overrid
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
 
 # Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
-# Stored in PR-keyed temp files, NOT shell vars / associative arrays: each
-# iteration may run as a separate shell, so in-memory state wouldn't survive,
-# and macOS ships bash 3.2 which has no associative arrays. Mirrors the
-# WATCH_RESULT_FILE pattern above.
+# Stored in files, NOT shell vars / associative arrays: each iteration may run
+# as a separate shell, so in-memory state wouldn't survive, and macOS ships
+# bash 3.2 which has no associative arrays.
+#
+# They live under the repository's git directory rather than /tmp. A /tmp path
+# keyed on the PR number alone collides whenever two repositories watch the same
+# PR number — one clobbers the other's streak counts. `git rev-parse --git-dir`
+# is repository-scoped by construction, and resolves per worktree (a linked
+# worktree gets .git/worktrees/<name>), which is the right granularity: one
+# worktree, one branch, one PR. Anything under the git directory is also
+# invisible to `git status`, so watch state can never be mistaken for a working
+# tree change. `finalize.md` Step 2 uses the same convention.
 #   - STREAK_FILE:   per-check pending streak, one "<count>\t<check name>" line each
 #   - NOTIFIED_FILE: space-joined set of awaiting-human check names last notified,
 #                    so a long approval wait doesn't re-notify every 5 minutes
-STREAK_FILE="${FORGE_STREAK_FILE:-/tmp/forge-pending-streak-$PR_NUMBER}"
-NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-/tmp/forge-blocked-notified-$PR_NUMBER}"
+FORGE_STATE_DIR="$(git rev-parse --git-dir)/forge"
+mkdir -p "$FORGE_STATE_DIR"
+STREAK_FILE="${FORGE_STREAK_FILE:-$FORGE_STATE_DIR/pending-streak-$PR_NUMBER}"
+NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMBER}"
 : > "$STREAK_FILE"
 : > "$NOTIFIED_FILE"
 
 # Result marker consumed by Section 3 (notification). Default to "aborted" so
 # any abnormal exit (cap hit, error, killed) produces an honest notification
 # rather than a false "Ready to merge".
-WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-/tmp/forge-watch-result-$PR_NUMBER}"
+WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
 # These echoes must be translated to $LANG_CODE before being emitted
