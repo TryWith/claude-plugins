@@ -414,6 +414,11 @@ next card for that section.
 Grouping by section keeps related questions together, and most documents only
 have `Ask` items in a couple of sections.
 
+On a second or later pass, carry every answer from the earlier passes with you.
+An `Ask` the user has already answered — including one answered "keep the
+document as written" — is settled, and is never put to them again, even when
+the re-review re-detects the finding behind it.
+
 ### Building the choices
 
 Every question offers between two and four choices, and **must** include both
@@ -454,11 +459,13 @@ Record each answer against its finding. Do not apply anything yet.
 Once **every** `Ask` in the document has an answer, apply the answers together
 with every `Fix now` in a **single pass** over the file.
 
-Writing exactly once is deliberate. If the session is interrupted at any point
-before this section, the target file is untouched — there is no half-edited
-document to recover, which is why this command keeps no state files. (This is
-what makes it different from `finalize.md`, whose loop commits and pushes on
-every iteration and therefore does need `.git/forge/` state.)
+Writing exactly once per pass is deliberate. The file is only ever rewritten in
+full: a session interrupted anywhere in Sections 3-6 leaves it exactly as the
+previous pass left it, and a completed write applies every answer at once.
+Either way the document on disk is complete and self-consistent — there is
+never a half-edited state to recover, which is why this command keeps no state
+files. (This is what makes it different from `finalize.md`, whose loop commits
+and pushes on every iteration and therefore does need `.git/forge/` state.)
 
 Rules:
 
@@ -475,12 +482,25 @@ After writing, continue to Section 8.
 
 ### Loop
 
-Re-run Sections 3 through 5 against the written file. If new `Blocker` or
-`Major` findings appear, go back to Section 6.
+Re-run Sections 3 through 5 against the written file, then compare what it
+found against what this run has already settled.
+
+Go back to Section 6 only for a `Blocker` or `Major` finding that is **new** —
+one this run has neither resolved nor had declined. A finding whose `Ask` the
+user answered with "keep the document as written" is neither: it is settled, it
+stays settled, and it will be re-detected on every later pass precisely because
+nothing was written for it. Restate its recorded outcome and move on.
+`finalize.md` carries the same rule for the same reason — without it the loop
+ping-pongs on one contested finding until the cap fires.
+
+Count the passes yourself. The count lives in your context alongside
+`TARGET_FILE` and the other carried values, for the same reason they do: each
+bash block may run as a separate shell, and this command writes no state files.
+Increment it each time you re-enter this section, and check it against the cap
+before going back to Section 6.
 
 ```bash
-MAX_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
-echo "Iteration cap: $MAX_LOOP"
+echo "Iteration cap: ${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
 ```
 
 The cap is 3 by default — lower than the review loop in `finalize.md`, which
