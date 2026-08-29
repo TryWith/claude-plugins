@@ -239,3 +239,135 @@ Every finding carries four fields. Do not collapse them:
 | consequence | What happens if it is implemented as written — translated to `$LANG_CODE` |
 
 The consequence field is not decoration: Section 4 assigns severity from it.
+
+## Section 4: Triage and verdict
+
+Severity and disposition are **two independent axes**. A finding gets one value
+on each. Assigning a severity is not a substitute for assigning a disposition.
+
+### Severity — how much it costs
+
+Classify by what happens if the document is implemented as written, not by how
+large the defect looks on the page.
+
+| Label | Test | If implemented |
+|-------|------|----------------|
+| `Blocker` | Work **stops or goes wrong** without this | Cannot start, or starts and reliably builds the wrong thing |
+| `Major` | Work **comes back** without this | Something runs, but rework or a return to design is likely |
+| `Minor` | Work **proceeds and does not return** | No effect on implementation; readability or maintainability |
+
+Examples:
+
+- `Blocker` — a section still says TBD; §2 says 3 retries and §5 says 5; a file
+  named as a modification target does not exist; a spec requirement maps to no
+  task in the plan
+- `Major` — no test strategy; error behaviour undefined; a breaking change with
+  no migration steps; no acceptance criteria
+- `Minor` — terminology drift; redundant prose; odd section ordering
+
+`Blocker` findings come mostly from A, B, C and E — the perspectives that can
+be checked mechanically. That `Blocker` is objective while `Major` carries
+judgement is not a coincidence.
+
+### Disposition — who decides
+
+| Label | Condition | Effect |
+|-------|-----------|--------|
+| `Fix now` | The answer is uniquely determined | Applied automatically under `--fix` |
+| `Ask` | A design decision is required. Perspective C mismatches go here by default | Put to the user as a multiple-choice question |
+| `Reject` | False positive | Reported with a one-line reason |
+
+**High severity does not imply `Ask`.** A `Major` finding whose answer is
+uniquely determined is a `Fix now`.
+
+|  | `Fix now` | `Ask` |
+|---|-----------|-------|
+| `Blocker` | TBD, but context fixes the answer → fill it in | Assumes Redis with no precedent in this repo → decide |
+| `Major` | No test strategy section → write the standard one | Retry on error or not → policy decision |
+| `Minor` | Terminology drift → unify | (rare) |
+
+Give **every** finding exactly one disposition, in writing. Passing over a
+finding in silence is not a disposition.
+
+### Verdict
+
+```
+READY      ⟺  Blocker 0  AND  Major 0  AND  unresolved Ask 0
+NOT READY  ⟺  anything else
+```
+
+Without `--fix` no `Ask` is ever put to the user, so any `Ask` at all leaves the
+verdict at `NOT READY`. That is correct: "there are design decisions still
+yours to make" is not a ready state.
+
+**The verdict blocks nothing.** This command does not interrupt the superpowers
+workflow. Its value is that a human sees the state at a glance, and that the
+string is stable enough for a hook or CI job to read later. That is also why
+`READY` and `NOT READY` are never translated.
+
+## Section 5: Report
+
+Emit the report in `$LANG_CODE`, keeping every label listed in Section 1 in
+English.
+
+### Structure
+
+```
+── Review: 2026-08-29-foo-design.md (spec) ──
+Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2
+
+A Completeness   ⚠️ Blocker 1 / Minor 2
+B Consistency    ⚠️ Blocker 1
+C Repo Grounding ⚠️ Major 1 (Ask)
+D Blind Spots    ⚠️ Major 2
+E Buildability   — not applicable (spec)
+F Scope          ✓ clean
+G Assumptions    ✓ clean
+H Alternatives   ⚠️ Minor 1
+I YAGNI          ✓ clean
+J Acceptance     ⚠️ Major 1
+
+[Findings]
+
+[Blocker] §3.2 Completeness
+  The state storage mechanism is still TBD
+  → an implementer cannot tell what to build
+  Disposition: Ask (a design decision is required)
+
+[Major] §whole Blind Spots
+  No test strategy section
+  → verification method sends the work back to design after implementation
+  Disposition: Fix now (write the standard section)
+
+[Minor] §6.3 Consistency
+  "job" and "task" are used interchangeably
+  → no effect on implementation
+  Disposition: Fix now (unify terminology)
+
+→ To apply fixes: /forge:review-design --fix
+```
+
+Rules for the header block:
+
+- Every one of the ten perspectives appears, in order, always
+- A perspective with no findings shows `✓ clean`; one that does not apply to
+  this document type shows `— not applicable (<type>)`
+- **The counts on the verdict line must equal the sum of the per-perspective
+  counts.** Add them up before emitting; a header that disagrees with its own
+  breakdown is exactly the defect perspective B exists to catch
+
+Each finding is four lines: `[Severity] location Perspective`, then the
+finding, then `→` and the consequence, then the disposition with a short
+reason. Do not compress them onto one line — the consequence is what justifies
+the severity, and a reader needs to be able to disagree with it.
+
+If the document was not in the expected format, or a plan's companion spec
+could not be found, say so **above** the verdict line.
+
+### Where to stop
+
+When `FIX_MODE` is `0`, the report is the whole output. **Do not modify the
+target file, and do not ask the user anything** — report-only mode is
+non-interactive so it can run unattended. Print the `--fix` hint and stop.
+
+When `FIX_MODE` is `1`, continue to Section 6.
