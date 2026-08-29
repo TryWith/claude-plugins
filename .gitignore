@@ -4,5 +4,5 @@ node_modules/
 .env
 .env.local
 
-# superpowers 生成物 (spec / plan) はコミットしない
+# superpowers-generated design documents (spec / plan) are not committed
 docs/superpowers/

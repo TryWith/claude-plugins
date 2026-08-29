@@ -62,6 +62,12 @@ English; only their descriptions are translated.
 | `<path>` | The document to review. Optional — see Section 2 when omitted. |
 | `--fix` | Continue past the report: resolve `Ask` items, apply changes, re-review. |
 
+`--fix` is a flag, not a value. Strip every `--`-prefixed token from the
+argument list **before** resolving `<path>`; `<path>` is the first token that
+remains, and the order the two are typed in does not matter. If nothing
+remains, `<path>` was omitted — take the staged search in Section 2. Never
+treat `--fix` itself as a path.
+
 **Values do not survive between bash blocks.** Each block may run as a separate
 shell, so a variable assigned in one block is gone in the next. Do not write
 state files either. Instead, read each value out of the block's output and
@@ -82,26 +88,32 @@ that one too, and is what an unattended caller should pass.
 
 ### When `<path>` is omitted — staged search
 
-`superpowers:brainstorming` and `superpowers:writing-plans` both state that
-"User preferences for spec location override this default", so the default
-paths are a starting point, not a guarantee. Search in this order and stop at
-the first stage that yields a candidate:
+`superpowers:brainstorming` states that "User preferences for spec location
+override this default", and `superpowers:writing-plans` says the same of plan
+location, so the default paths are a starting point, not a guarantee. Search in
+this order and stop at the first stage that yields a candidate:
 
 ```bash
 # Stage 1 — the documented default locations
 find docs/superpowers/specs docs/superpowers/plans -name '*.md' -type f 2>/dev/null | sort
 
-# Stage 2 — anywhere under docs/ that looks like a design document
-find docs -type f -name '*.md' \( -name '*design*' -o -name '*plan*' \) 2>/dev/null | sort
+# Stage 2 — anywhere under docs/ that looks like a design document.
+# Match on the *path*, not just the basename: superpowers names plans
+# `YYYY-MM-DD-<feature-name>.md`, with no "plan" token in the filename, so a
+# relocated plan is only reachable through its directory.
+find docs -type f -name '*.md' \
+  \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \) \
+  2>/dev/null | sort
 ```
 
 If both stages come up empty, report the directories you searched, ask the user
 to pass an explicit path, and stop. Do not guess.
 
-When several candidates exist, prefer the newest date in the filename. A
-candidate whose filename carries no date sorts last. If two or more share that
-date, present them as a multiple-choice question and let the user pick — never
-pick silently.
+When several candidates exist, prefer the newest date in the filename. `sort`
+above orders by path, not by date, so read the dates out of the filenames
+yourself — never just take the last line. A candidate whose filename carries no
+date sorts last. If two or more share that date, present them as a
+multiple-choice question and let the user pick — never pick silently.
 
 ### Document type
 
@@ -126,8 +138,14 @@ header line. Resolve the companion spec in this order:
 2. A spec file with the same date and topic in `docs/superpowers/specs/`
 
 ```bash
-grep -m1 '^\*\*Spec:\*\*' <the plan file>
+# `|| true` — a plan with no Spec: line is a fall-through, not a failed block.
+grep -m1 '^\*\*Spec:\*\*' "<the plan file>" || true
 ```
+
+Check that the path the `Spec:` line names actually exists before accepting it.
+If it does not, fall through to step 2, and failing that to the "no spec found"
+branch below — a `Spec:` line pointing at a moved or deleted file is itself a
+Perspective C finding.
 
 If a spec is found, Section 3 checks requirement coverage in both directions.
 If none is found, **say so at the top of the report and continue** — coverage
@@ -165,8 +183,11 @@ Then continue to Section 3.
 ## Section 3: Review perspectives
 
 Read the whole document, then apply all ten perspectives below **in order**, in
-this single context. Do not dispatch subagents — this command has no external
-dependencies.
+this single context. Do not dispatch subagents — every perspective is
+answerable from this document and this repository, so there is no work to farm
+out. (The command does assume the superpowers conventions in Section 2, and
+Section 8 points at superpowers for execution, but it never invokes another
+command.)
 
 `◎` = primary for this document type, `○` = applies, `–` = not applicable.
 
@@ -200,11 +221,17 @@ This is the one perspective that reads outside the document. Check the claims
 the document makes about the repository:
 
 ```bash
-# Do the paths the document names actually exist?
-# Run this for each path the document references.
-ls -la <path named in the document>
+# Do the paths the document names actually exist? Check them all in one block,
+# and always quote — these paths come from the document, so they may contain
+# spaces or shell metacharacters and must never be interpolated bare.
+for p in "<path 1 named in the document>" "<path 2>"; do
+  if [ -e "$p" ]; then echo "ok      $p"; else echo "MISSING $p"; fi
+done
 
-# What conventions does this repository document?
+# What conventions does this repository document? Read the root file and any
+# CLAUDE.md governing a directory the document touches — a nested one only
+# applies to files at or below it.
+find . -name 'CLAUDE.md' -not -path './.git/*' 2>/dev/null
 cat CLAUDE.md 2>/dev/null
 ```
 
@@ -359,7 +386,7 @@ English.
 ### Structure
 
 ```
-── Review: 2026-08-29-foo-design.md (spec) ──
+── Review: docs/superpowers/specs/2026-08-29-foo-design.md (spec) ──
 Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2
 
 A Completeness   ⚠️ Blocker 1 / Minor 2
@@ -390,7 +417,7 @@ J Acceptance     ⚠️ Major 1
   → no effect on implementation
   Disposition: Fix now (unify terminology)
 
-→ To apply fixes: /forge:review-design --fix
+→ To apply fixes: /forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
 ```
 
 Rules for the header block:
@@ -401,16 +428,28 @@ Rules for the header block:
 - The header block counts severities only. Disposition never appears here —
   the verdict line carries the `Ask` total, and each finding states its own
   disposition below
-- **The counts on the verdict line must equal the sum of the per-perspective
-  counts.** Add them up before emitting; a header that disagrees with its own
-  breakdown is exactly the defect perspective B exists to catch
+- **The three severity counts on the verdict line must equal the sum of the
+  per-perspective counts.** Add them up before emitting; a header that
+  disagrees with its own breakdown is exactly the defect perspective B exists
+  to catch. `Ask` is a disposition, has no per-perspective row to sum against,
+  and is counted straight off the findings list
 - Every finding appears in the findings list, not just the ones shown in the
   example above — the example is abridged
+- The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
+  verbatim. A bare `/forge:review-design --fix` re-runs the staged search and
+  can land on a different document than the one this report is about
+- **The hint is printed only when `FIX_MODE` is `0`.** A run that is already
+  applying fixes must not tell the reader to pass `--fix`
 
 Each finding is four lines: `[Severity] location Perspective`, then the
 finding, then `→` and the consequence, then the disposition with a short
 reason. Do not compress them onto one line — the consequence is what justifies
 the severity, and a reader needs to be able to disagree with it.
+
+A `Reject` is the one exception. It counts toward no severity total, so heading
+it `[Blocker]` would put the findings list at odds with the header block the
+rule above just reconciled. Head it `[Reject] location Perspective` instead,
+and give the one-line reason in place of the consequence and disposition.
 
 If the document was not in the expected format, or a plan's companion spec
 could not be found, say so **above** the verdict line.
@@ -455,13 +494,17 @@ the re-review re-detects the finding behind it.
 
 ### Building the choices
 
-Every question offers between two and four choices, and **must** include both
-of these:
+Every question offers between two and four choices. **Keep the document as
+written** — leave it alone, and say plainly that the finding stays unresolved
+and the verdict stays `NOT READY` — is one of them on **every** question,
+without exception.
 
-- **Match the repository** — change the document to agree with what is
-  actually there
-- **Keep the document as written** — leave it alone. State plainly that the
-  finding stays unresolved and the verdict stays `NOT READY`
+When the finding is a Perspective C mismatch, one of the other choices must be
+**Match the repository** — change the document to agree with what is actually
+there. On a finding that is not a repository mismatch (a TBD, an undefined
+policy) there is nothing to match, so that choice is omitted and its slot goes
+to a concrete alternative instead. The example below is one of those, which is
+why it has no "Match the repository" line.
 
 Fill the remaining slots with concrete alternatives. Give every choice a
 one-line consequence.
@@ -495,12 +538,14 @@ with every `Fix now` in a **single pass** over the file.
 
 Writing exactly once per pass is deliberate. The file is only ever changed as
 one batch of targeted edits: a session interrupted anywhere in Sections 3-6
-leaves it exactly as the previous pass left it, and a completed write applies
-every answer at once.
-Either way the document on disk is complete and self-consistent — there is
-never a half-edited state to recover, which is why this command keeps no state
-files. (This is what makes it different from `finalize.md`, whose loop commits
-and pushes on every iteration and therefore does need `.git/forge/` state.)
+leaves it exactly as the previous pass left it, and a completed batch applies
+every answer at once. That is why this command keeps no state files. (It is
+also what makes it different from `finalize.md`, whose loop commits and pushes
+on every iteration and therefore does need `.git/forge/` state.)
+
+The batch itself is **not** atomic — it is several targeted edits, and one can
+fail part way through. The write-failure rule below is what covers that case;
+do not read "one batch" as a guarantee that no half-edited state can exist.
 
 If there is nothing to apply — no `Ask` was answered with a change and
 `FIX_ITEMS` is empty — **write nothing** and go straight to Section 8. A clean
@@ -514,7 +559,9 @@ Rules:
 - A `Reject` produces no edit.
 - Preserve the document's existing heading structure and style. Do not reformat
   sections you are not changing.
-- If the write fails, **stop and report**. Never continue past a partial write.
+- If any edit in the batch fails, **stop and report**: name the edits that
+  landed and the ones that did not, so the user can finish or revert by hand.
+  Never continue to Section 8 on top of a partial write.
 
 After writing, continue to Section 8.
 
@@ -522,8 +569,14 @@ After writing, continue to Section 8.
 
 ### Loop
 
-Re-run Sections 3 and 4 against the written file and re-emit Section 5's
-report, then compare what it found against what this run has already settled.
+If Section 7 wrote nothing, there is nothing to re-review: the file is byte for
+byte what Section 3 already read, so another pass can only reproduce the report
+you just emitted. Skip straight to *Completion output* below, carrying the
+verdict you already have.
+
+Otherwise, re-run Sections 3 and 4 against the written file and re-emit
+Section 5's report, then compare what it found against what this run has
+already settled.
 You are using those sections as a subroutine: **their own routing does not
 apply here.** Section 5's closing line sends a `--fix` run to Section 6, and
 Section 5's `--fix` hint is for the report-only exit — on this path, ignore
@@ -547,14 +600,20 @@ Start it at 1 the first time you reach this section, and add one each time you
 return to it, and check it against the cap before going back to Section 6.
 
 ```bash
-echo "Iteration cap: ${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
+# Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or zero
+# value must fail *closed* — fall back to the default rather than looping
+# unbounded or never looping at all. `finalize.md` guards its counter the same
+# way, and for the same reason.
+MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
+case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*|0) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
+echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
 ```
 
-The cap is 3 by default — lower than the review loop in `finalize.md`, which
-allows 10. Code has CI as an outside judge; a design document does not. Each
-extra pass is the same context re-reading prose it just wrote, and the returns
-fall off quickly. **The only information entering the loop from outside is the
-answers the user gave.**
+The cap is 3 by default (override with `FORGE_MAX_DESIGN_REVIEW_LOOP`) — lower
+than the review loop in `finalize.md`, which allows 10. Code has CI as an
+outside judge; a design document does not. Each extra pass is the same context
+re-reading prose it just wrote, and the returns fall off quickly. **The only
+information entering the loop from outside is the answers the user gave.**
 
 On reaching the cap, report the current verdict — which will be `NOT READY` —
 and exit **normally**. Hitting the cap is a result, not an error.
@@ -577,7 +636,18 @@ Applied:
   • §7    added a test strategy section
   • §6.3  unified "job" / "task" terminology
 
-Review the changes with: git diff <target file>
+Review the changes with: git diff -- <target file>
+```
+
+`git diff` reports tracked files only. Design documents often sit in an ignored
+or untracked directory — this repository ignores `docs/superpowers/`, for one —
+and there `git diff` prints nothing at all. Check before you print the pointer,
+and emit whichever line actually shows the change:
+
+```bash
+git ls-files --error-unmatch -- "<target file>" >/dev/null 2>&1 \
+  && echo "Review the changes with: git diff -- <target file>" \
+  || echo "<target file> is not tracked by git — open it to review the changes"
 ```
 
 ### Handing off to implementation

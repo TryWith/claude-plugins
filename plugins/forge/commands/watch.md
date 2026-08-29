@@ -66,7 +66,7 @@ behavior), not encoded in shell. Priority order (highest first):
 | Emoji | ❌ | All emoji are language-neutral and shared across every language |
 | File and command names | ❌ | `/forge:finalize` etc. are proper nouns |
 | Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
-| Verdict, severity and disposition labels | ❌ | `READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Reject` — machine-readable keys used by `/forge:review-design` |
+| Verdict, severity and disposition labels | ❌ | `READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject` — machine-readable keys: verdict and severity from `/forge:review-design`, dispositions shared by `/forge:review-design` (`Fix now` / `Ask` / `Reject`) and `/forge:finalize` (`Fix now` / `Defer` / `Reject`) |
 
 ### Translation policy
 
