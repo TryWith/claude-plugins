@@ -63,7 +63,10 @@ and the `— not applicable (<type>)` rows beneath it. Translating either one
 breaks the same machine-readability the verdict string is kept English for.
 
 Perspective names (`Completeness`, `Consistency`, …) are also emitted in
-English; only their descriptions are translated.
+English; only their descriptions are translated. So is Section 8's
+`pass n/<cap>` line, for a sharper version of the same reason: it is the only
+carried value with no anchor outside the transcript, so it is read back by
+matching on that literal text.
 
 ### Arguments
 
@@ -469,6 +472,14 @@ becoming a special case in it:
 Both then count in the header block like any other finding, and a user who
 disagrees answers the `Ask` with "keep the document as written".
 
+A perspective that carries one of these findings is, by that fact, checked:
+`A Completeness` never appears as a `— not checked (format)` row, because a
+document with no `##` headings is incomplete on inspection and the finding
+above says so. Only the perspectives you genuinely could not apply take that
+row, and those carry no count. Otherwise the row would say "not checked" while
+holding a `Blocker`, and Section 5's rule that the verdict counts equal the sum
+of the per-perspective counts would have nothing to reconcile against.
+
 Without `--fix` no `Ask` is ever put to the user, so any `Ask` at all leaves the
 verdict at `NOT READY`. That is correct: "there are design decisions still
 yours to make" is not a ready state.
@@ -488,11 +499,14 @@ work:
 | Value | Content |
 |-------|---------|
 | `VERDICT` | `READY` or `NOT READY` |
-| `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to |
+| `PERSPECTIVE_STATUS` | One entry per perspective A–J: its severity counts, or `not applicable`, or `not checked (format)`. Section 5's header block is emitted from this and from nothing else — the findings list can tell you a perspective's counts, but nothing in it distinguishes a perspective that was skipped from one that came back clean |
+| `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to, with the `§whole` ones first |
 | `FIX_ITEMS` | Every finding whose disposition is `Fix now` |
 
 `ASK_ITEMS` is ordered by document section, not by severity: Section 6 walks
-the document in order and puts one card to the user per section.
+the document in order and puts one card to the user per section. `§whole`
+items sort ahead of every section, because they belong to none and Section 6
+puts them on a card of their own before the walk starts.
 
 ## Section 5: Report
 
@@ -557,7 +571,11 @@ Rules for the header block:
   example above — the example is abridged
 - The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
   verbatim. A bare `/forge:review-design --fix` re-runs the staged search and
-  can land on a different document than the one this report is about
+  can land on a different document than the one this report is about. Wrap the
+  path in double quotes in the hint when it contains a space or any other shell
+  metacharacter — Section 1 treats a second remaining token as a second path
+  and stops, so an unquoted `docs/my design/foo.md` prints a hint that is an
+  error when the reader runs it
 - **The hint is printed only when `FIX_MODE` is `0` and the report carries at
   least one `Fix now` or `Ask`.** A run that is already applying fixes must not
   tell the reader to pass `--fix`, and neither must a report with nothing for a
@@ -615,6 +633,16 @@ put its questions to the user as **one multiple-choice card, at most four
 questions**. Sections with no `Ask` items produce no card. If a section has
 more than four, take the four highest-severity ones and put the rest on the
 next card for that section.
+
+A `§whole` finding belongs to no section, so the walk on its own would never
+reach it. Put every `§whole` `Ask` on a **first card, before the walk starts**,
+under the same four-question limit and the same overflow rule. This is not an
+edge case: `§whole` is the location for anything the document does not contain
+at all, which is where most of D, G, H, I and J land, and **both** of Section
+4's degradation findings are `§whole` `Ask`s. Dropping them would leave the
+two findings that exist to keep a degraded review off `READY` as the only ones
+the user is never asked about, and would make Section 7's precondition —
+every `Ask` answered — impossible to satisfy.
 
 Grouping by section keeps related questions together, and most documents only
 have `Ask` items in a couple of sections.
@@ -708,23 +736,41 @@ verdict you already have.
 
 Otherwise, re-run Sections 3 and 4 against the written file and re-emit
 Section 5's report, then compare what it found against what this run has
-already settled.
+already settled. Perspective C's two blocks are the exception: the
+path-existence check and the CLAUDE.md `find` read the *repository*, and only
+the document changed since the last pass. Re-use the results you already have,
+and re-run a path check only for a path the batch you just wrote added or
+altered.
 You are using those sections as a subroutine: **their own routing does not
-apply here.** Section 5's closing line sends a `--fix` run to Section 6, and
-Section 5's `--fix` hint is for the report-only exit — on this path, ignore
-both and come back to this section.
+apply here.** Section 5's closing line sends a `--fix` run to Section 6 —
+ignore it and come back to this section instead. (Section 5's `--fix` hint
+needs no such exemption: its own condition already requires `FIX_MODE` to be
+`0`, and it never is on this path.)
 
 Go back to Section 6 only for a **new `Ask`, at any severity** — meaning one
 this run has neither resolved nor had declined. Disposition routes here;
 severity does not. A new `Blocker` is a question only when its disposition is
 `Ask`, and a new `Minor` `Ask` is a question just the same — routing on severity
 instead would send a new `Blocker` whose answer is uniquely determined to
-Section 6 with nothing to ask about. A finding whose `Ask` the user answered with "keep
-the document as written" is neither: it is settled, it stays settled, and it
-will be re-detected on every later pass precisely because nothing was written
-for it. Settled means it will not be put to the user again. It stays
-**unresolved** for the verdict — a declined `Ask` keeps the document at
-`NOT READY`. Restate its recorded outcome and move on.
+Section 6 with nothing to ask about. A finding whose `Ask` the user has already
+answered is neither: it is settled, it stays settled, and settled means it is
+not put to them again. Restate its recorded outcome and move on.
+
+Settled covers both answers, and they part on the verdict:
+
+- Answered with **"keep the document as written"** — nothing was written for
+  it, so it is re-detected on every later pass, and it stays **unresolved**: a
+  declined `Ask` keeps the document at `NOT READY`.
+- Answered with a **change** — it is **resolved** and holds the verdict at
+  nothing. Normally the change removes it and the re-review does not see it
+  again. If the re-review still detects it, the edit did not land what was
+  asked: say so in the completion output, as an applied change that did not
+  take, rather than reopening a question that is settled or holding the
+  verdict hostage to it.
+
+Without the split, the one case the rules do not name — an answered-with-a-
+change finding the re-review still sees — is as readable as `READY` over an
+open `Ask` as it is as `NOT READY` forever.
 `finalize.md` carries the same rule for the same reason — without it the loop
 ping-pongs on one contested finding until the cap fires.
 
@@ -741,17 +787,28 @@ Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
 bash block may run as a separate shell, and this command writes no state files.
 Start it at 1 the first time you reach this section, and add one each time you
-return to it, and check it against the cap before going back to Section 6 or 7.
+return to it. Before going back to Section 6 or 7, stop when the count is
+**greater than or equal to** the cap — the same `-ge` test `finalize.md` uses,
+so the default cap of 3 allows three passes and no fourth.
 
 The count is the **one** carried value with no anchor outside your context:
 `TARGET_FILE` is on disk, the answers were typed by the user, but the count is
-only remembered. So print it — `pass n/<cap>` — every time you arrive here, and
-it survives in the transcript: the highest `pass n/<cap>` line already emitted
-is the count, recoverable by reading back. Count **those** lines, not the
-*Re-review after fixes* headers — that header belongs to *Completion output*
-below and is emitted once, on the way out, so counting it would read every pass
-as the first. **If you cannot establish the count, treat it as at the cap and
-exit**, the same fail-closed rule the guard below applies to the cap itself.
+only remembered. So print it — literally `pass n/<cap>`, in English, for the
+same reason the labels in Section 1 stay English: this line is read back
+mechanically, and a translated one cannot be. Print it every time you arrive
+here and it survives in the transcript: the highest `pass n/<cap>` line already
+emitted is the count, recoverable by reading back. Count **those** lines, not
+the *Re-review after fixes* headers — that header belongs to *Completion
+output* below and is emitted once, on the way out, so counting it would read
+every pass as the first.
+
+**No `pass n/<cap>` line yet means this is the first arrival and the count is
+1** — that is the expected state, not a failure to establish it. "Cannot
+establish" means the lines are there but unreadable or mutually inconsistent.
+**In that case treat the count as at the cap and exit**, the same fail-closed
+rule the guard below applies to the cap itself. Reading an empty transcript as
+"cannot establish" would fail the loop closed on its very first pass and apply
+nothing at all.
 
 ```bash
 # Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or
@@ -759,10 +816,12 @@ exit**, the same fail-closed rule the guard below applies to the cap itself.
 # looping unbounded or never looping at all. `finalize.md` applies the same
 # fail-closed rule when it reads its counter back from disk.
 MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
-# `case` rejects the empty and non-numeric values; the `-gt 0` test then rejects
-# the zero-valued ones `case` cannot enumerate — `0` is one pattern, but `00`
-# and `000` are numeric, pass the pattern, and compare equal to zero, which
-# would put the very first pass at the cap and stop the loop before it ran.
+# `case` rejects the non-numeric values. `:-` above already turned an unset or
+# empty setting into 3, so the `''` pattern is belt and braces, not the thing
+# that catches those. The `-gt 0` test then rejects the zero-valued ones `case`
+# cannot enumerate — `0` is one pattern, but `00` and `000` are numeric, pass
+# the pattern, and compare equal to zero, which would put the very first pass
+# at the cap and stop the loop before it ran.
 case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
 [ "$MAX_DESIGN_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_DESIGN_REVIEW_LOOP=3
 echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
@@ -774,8 +833,16 @@ outside judge; a design document does not. Each extra pass is the same context
 re-reading prose it just wrote, and the returns fall off quickly. **The only
 information entering the loop from outside is the answers the user gave.**
 
-On reaching the cap, report the current verdict — which will be `NOT READY` —
-and exit **normally**. Hitting the cap is a result, not an error.
+On reaching the cap, report the current verdict and exit **normally**. Hitting
+the cap is a result, not an error.
+
+It is usually `NOT READY` — the cap only fires while something is still routing
+back — but do not assume it. A cap that fires with nothing outstanding but a
+`Minor` `Fix now` leaves `Blocker 0 / Major 0 / Ask 0`, which is `READY` by the
+formula in Section 4. Report whatever the formula gives, list the unapplied
+`Fix now` items beside it, and when that verdict is `READY` say in one line
+that it was reached with fixes still unapplied — including above the *Handing
+off to implementation* block, which a `READY` plan reaches on this path too.
 
 ### Completion output
 
