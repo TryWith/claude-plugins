@@ -12,10 +12,16 @@ against ten perspectives, and report whether it is ready for implementation.
 /forge:review-design [<path>] [--fix]
 ```
 
-Without `--fix` this command is **report-only and non-interactive**: it never
-writes to the target file. That is deliberate — a non-interactive report can be
-run from CI or a hook as a gate. `--fix` only decides whether to continue past
-the report; it never changes how the verdict is computed.
+Without `--fix` this command is **report-only**: it never writes to the target
+file, and it never puts findings to the user. That is deliberate — a report
+that cannot alter its subject and cannot block on an answer is usable from CI
+or a hook as a gate. `--fix` only decides whether to continue past the report;
+it never changes how the verdict is computed.
+
+One exception sits outside that guarantee: when `<path>` is omitted, target
+resolution may need a single disambiguation question before the review starts
+(Section 2). **For unattended use, always pass an explicit `<path>`** — that
+skips every question in Section 2 and makes the whole run non-interactive.
 
 ## Section 1: Language and arguments
 
@@ -59,6 +65,9 @@ this way are named in the sections below.
 ### When `<path>` is given
 
 Use it. Skip to *Document type* below.
+
+Passing a path is also what makes an unattended run safe: every question in
+this section exists only for the omitted-path case.
 
 ### When `<path>` is omitted — staged search
 
