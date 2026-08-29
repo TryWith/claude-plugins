@@ -37,7 +37,7 @@ All command files are written in English as the **source language**. At executio
 
 When editing command files:
 - Keep prose and template strings in English
-- Do **not** hard-code Japanese / other-language strings into command files — they belong only in the bilingual README
+- Do **not** hard-code Japanese / other-language strings into command files — they belong only in the trilingual README
 - **Not translated** (intentionally): Conventional Commits prefixes (`fix:`, `feat:`); status emoji (🔭 ✅ ⚠️ 🎉 ⏳ ❌); verdict, severity and disposition labels (`READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject`); document-type keys (`spec`, `plan`); perspective names (`Completeness`, `Consistency`, …); and loop-counter lines (`pass n/<cap>`). These are shared across all languages. `watch.md`'s translation-scope table is the canonical list — extend it there and mirror the category here.
 - Default user-facing output is Japanese (`ja`), since the primary audience is internal TryWith users.
 

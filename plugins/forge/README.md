@@ -176,9 +176,9 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 > **`/forge:review-design` について:** 上記の依存コマンドはいずれも不要で、
 > Markdown ファイルを読むだけなので素の Claude Code でも動作する。
 > `superpowers` プラグインは任意で、フローの両端にのみ関わる。レビュー対象の
-> 設計書・実装計画を生成するのがこのプラグインであり、`READY` と判定された
+> 設計書・実装計画を生成するのは `superpowers` 側であり、`READY` と判定された
 > 実装計画の受け渡し先となる `superpowers:subagent-driven-development` /
-> `superpowers:executing-plans` を提供するのもこのプラグインである。
+> `superpowers:executing-plans` を提供するのも `superpowers` 側である。
 
 ### 使い方
 

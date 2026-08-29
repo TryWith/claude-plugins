@@ -21,9 +21,12 @@ it never changes how the verdict is computed.
 
 Target resolution runs before the review, and it is the one place a question
 can still arise. It asks nothing when `<path>` is **given** and is
-**self-typing** — the path has a `specs/` or `plans/` component (not both), or
-its filename ends in `-design.md`, so the Document type table in Section 2
-resolves without help. It asks at most one question per unresolved dimension
+**self-typing** — the path has a `specs/` component, or a `plans/` component,
+or a filename ending in `-design.md`, and does **not** carry both a `specs/`
+and a `plans/` component, so the Document type table in Section 2 resolves
+without help. Carrying both is row 0, which asks however the filename ends.
+
+It asks at most one question per unresolved dimension
 otherwise: when the resolved path matches none of those patterns, when `<path>`
 is omitted and the search finds several candidates it cannot rank, and always
 when the search had to fall through to Stage 3 or to Stage 2's `*design*` /
@@ -110,8 +113,9 @@ unreadable — say so and stop; do not fall through to the search. Skip to
 
 A path given here still goes through *Document type* below, so passing a path
 removes the search questions but not the type question. A path that is
-self-typing — under `specs/` or `plans/`, or ending in `-design.md` — removes
-that one too, and is what an unattended caller should pass.
+self-typing — under `specs/` or `plans/` but not both, or ending in
+`-design.md` — removes that one too, and is what an unattended caller should
+pass.
 
 ### When `<path>` is omitted — staged search
 
@@ -128,9 +132,13 @@ find docs/superpowers/specs docs/superpowers/plans -name '*.md' -type f 2>/dev/n
 # Match on the *path*, not just the basename: superpowers names plans
 # `YYYY-MM-DD-<feature-name>.md`, with no "plan" token in the filename, so a
 # relocated plan is only reachable through its directory.
-find docs -type f -name '*.md' \
+# Prune dot-directories and node_modules for the same reason Stage 3 does:
+# `docs/.cache/` and a vendored `docs/node_modules/` hold no design document,
+# and a hit inside one is a false candidate this command would then ask about.
+find docs \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
+  -type f -name '*.md' \
   \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \) \
-  2>/dev/null | sort
+  -print 2>/dev/null | sort
 
 # Stage 3 — the same shape anywhere in the repository. Stage 2 is capped at
 # docs/, but the preference that overrides the default location can move the
@@ -427,7 +435,7 @@ finding always wins over the table.
 | C `Repo Grounding` | A referenced path that does not exist → `Blocker`; a convention violated → `Major` |
 | D `Blind Spots` | Nearly always `Major` |
 | E `Buildability` | A task that cannot be followed → `Blocker`; coarse granularity → `Major` |
-| F `Scope` | Too large to plan as one unit → `Blocker`; a feature the spec does not call for → `Major` |
+| F `Scope` | Too large to plan as one unit, or a spec requirement that maps to no task → `Blocker`; a feature the spec does not call for → `Major` |
 | G `Assumptions` | An assumption that is false → `Blocker`; one left unverified → `Major` |
 | H `Alternatives` | `Minor` |
 | I `YAGNI` | `Major` or `Minor` |
@@ -479,8 +487,13 @@ becoming a special case in it:
 | `FORMAT_OK` is `0` | `Blocker`, `A Completeness`, `§whole`, disposition `Ask` |
 | a `plan` with no companion spec | `Major`, `F Scope`, `§whole`, disposition `Ask` |
 
-Both then count in the header block like any other finding, and a user who
-disagrees answers the `Ask` with "keep the document as written".
+Both then count in the header block like any other finding. A user who
+disagrees answers the `Ask` with "keep the document as written" — which records
+the disagreement but, like every declined `Ask`, leaves the finding unresolved
+and the verdict at `NOT READY`. That is deliberate for `FORMAT_OK`, and it is
+the intended answer for a plan that genuinely has no spec: say so in one line
+above the verdict so the reader knows the `NOT READY` is the missing spec and
+not something in the document, and do not invent a way to clear it.
 
 A perspective that carries one of these findings is, by that fact, checked:
 `A Completeness` never appears as a `— not checked (format)` row, because a
@@ -499,6 +512,12 @@ workflow. Its value is that a human sees the state at a glance, and that the
 string is stable enough for a hook or CI job to read later. That is also why
 `READY` and `NOT READY` are never translated.
 
+`READY` is a substring of `NOT READY`, so a reader that greps for the bare word
+matches both and reads every failure as a pass. Emit the verdict on its own
+line, in the fixed form `Verdict: <emoji> <READY|NOT READY>`, and tell any
+caller to test for `NOT READY` first — or to match the whole token — rather
+than for `READY` alone.
+
 ### What to carry forward
 
 Sections 5 to 8 consume these — Section 6 takes `ASK_ITEMS`, Section 7 takes
@@ -510,7 +529,7 @@ work:
 |-------|---------|
 | `VERDICT` | `READY` or `NOT READY` |
 | `PERSPECTIVE_STATUS` | One entry per perspective A–J: its severity counts, or `not applicable`, or `not checked (format)`. Section 5's header block is emitted from this and from nothing else — the findings list can tell you a perspective's counts, but nothing in it distinguishes a perspective that was skipped from one that came back clean |
-| `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to, with the `§whole` ones first |
+| `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to, with the `§whole` ones first. When `FORMAT_OK` is `0` a finding about specific text is located by a quoted line rather than a `§n.n`, so there is no section to order it by: order those by the line's position in the file, after the `§whole` ones |
 | `FIX_ITEMS` | Every finding whose disposition is `Fix now` |
 
 `ASK_ITEMS` is ordered by document section, not by severity: Section 6 walks
@@ -661,6 +680,15 @@ two findings that exist to keep a degraded review off `READY` as the only ones
 the user is never asked about, and would make Section 7's precondition —
 every `Ask` answered — impossible to satisfy.
 
+When `FORMAT_OK` is `0` there are no sections to walk at all. Every `Ask` is
+then located either by `§whole` or by a quoted line, so there is nothing for
+the walk to visit: put them all on cards in `ASK_ITEMS` order under the same
+four-question limit — the `§whole` ones on the first card as above, then the
+line-located ones in file order. Without this the walk reaches none of them in
+a formatless document, and Section 7's precondition — every `Ask` answered —
+could never be met, on the one document that always carries at least one
+`Ask` (Section 4's `FORMAT_OK` degradation).
+
 Grouping by section keeps related questions together, and most documents only
 have `Ask` items in a couple of sections.
 
@@ -707,6 +735,17 @@ proposals become one-sided and the user has no supported way to stand by what
 they wrote. If the user answers with free text instead, take it as given.
 
 Record each answer against its finding. Do not apply anything yet.
+
+### What to carry forward
+
+| Value | Content |
+|-------|---------|
+| `ANSWERS` | One entry per `Ask` put to the user: the finding it belongs to, and the answer — a choice, free text, or "keep the document as written" |
+
+`ANSWERS` is the only carried value the user produced, and Section 8 reads it
+on every later pass to tell a settled `Ask` from a new one. Carry it the way
+Section 1 says to carry everything: in your context, restated as you go. It
+accumulates across passes and is never reset.
 
 ## Section 7: Applying changes
 
@@ -785,12 +824,19 @@ Settled covers both answers, and they part on the verdict:
 - Answered with **"keep the document as written"** — nothing was written for
   it, so it is re-detected on every later pass, and it stays **unresolved**: a
   declined `Ask` keeps the document at `NOT READY`.
-- Answered with a **change** — it is **resolved** and holds the verdict at
-  nothing. Normally the change removes it and the re-review does not see it
+- Answered with a **change** — it is **resolved**, and drops out of the `Ask`
+  total. Normally the change removes it and the re-review does not see it
   again. If the re-review still detects it, the edit did not land what was
   asked: say so in the completion output, as an applied change that did not
-  take, rather than reopening a question that is settled or holding the
-  verdict hostage to it.
+  take, rather than reopening a question that is settled.
+
+**"Resolved" scopes to the `Ask` axis and to nothing else.** A re-detected
+finding still carries its severity, still appears in the findings list, and
+still counts in the header block and on the verdict line — so a `Blocker` whose
+fix did not land holds the document at `NOT READY`, as it must. Dropping the
+severity too would print `READY` over a defect this run just failed to remove,
+which is the one thing the verdict exists to prevent. What "settled" buys is
+that the *question* is not asked again, not that the *defect* stops counting.
 
 Without the split, the one case the rules do not name — an answered-with-a-
 change finding the re-review still sees — is as readable as `READY` over an
@@ -800,7 +846,12 @@ ping-pongs on one contested finding until the cap fires.
 
 A **new `Fix now`, at any severity**, needs no question, so it does not go back
 to Section 6 — it goes back to **Section 7** and is applied in the next batch.
-Both return paths cost a pass and are counted below. Section 4 promises that
+Both return paths cost a pass and are counted below. When one re-review turns
+up both a new `Ask` and a new `Fix now`, that is still a single pass, not two:
+Section 6's *Ask before Fix now* order holds, so go to Section 6 and then fall
+through to Section 7 with the new `Fix now` items in the same batch.
+
+Section 4 promises that
 every `Fix now` is applied automatically under `--fix`; routing only
 `Blocker`/`Major`/`Ask` back would break that promise for a `Minor` `Fix now`
 the re-review turned up, and drop it without a word. If the cap fires with
@@ -905,9 +956,9 @@ Reporting the second as the first leaves the `NOT READY` beside it
 unexplained.
 
 `git diff` reports tracked files only. Design documents often sit in an ignored
-or untracked directory — this repository ignores `docs/superpowers/`, for one —
-and there `git diff` prints nothing at all. Check before you print the pointer,
-and emit whichever line actually shows the change:
+or untracked directory — a repository that keeps `docs/superpowers/` out of git
+is a common case — and there `git diff` prints nothing at all. Check before you
+print the pointer, and emit whichever line actually shows the change:
 
 ```bash
 git ls-files --error-unmatch -- "<target file>" >/dev/null 2>&1 \
