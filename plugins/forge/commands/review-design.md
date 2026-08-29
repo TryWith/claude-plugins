@@ -233,7 +233,7 @@ Every finding carries four fields. Do not collapse them:
 
 | Field | Content |
 |-------|---------|
-| location | `§3.2`. When `FORMAT_OK` is `0`, quote the offending line instead |
+| location | `§3.2` for a finding about specific text. `§whole` for a finding about something the document does not contain at all. When `FORMAT_OK` is `0`, quote the offending line instead of citing a section |
 | perspective | The letter and English name, e.g. `A Completeness` |
 | finding | What is wrong — translated to `$LANG_CODE` |
 | consequence | What happens if it is implemented as written — translated to `$LANG_CODE` |
@@ -305,6 +305,20 @@ workflow. Its value is that a human sees the state at a glance, and that the
 string is stable enough for a hook or CI job to read later. That is also why
 `READY` and `NOT READY` are never translated.
 
+### What to carry forward
+
+Section 6 consumes these. Report them to yourself before emitting the report,
+and substitute them literally into later work:
+
+| Value | Content |
+|-------|---------|
+| `VERDICT` | `READY` or `NOT READY` |
+| `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to |
+| `FIX_ITEMS` | Every finding whose disposition is `Fix now` |
+
+`ASK_ITEMS` is ordered by document section, not by severity: Section 6 walks
+the document in order and puts one card to the user per section.
+
 ## Section 5: Report
 
 Emit the report in `$LANG_CODE`, keeping every label listed in Section 1 in
@@ -318,7 +332,7 @@ Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2
 
 A Completeness   ⚠️ Blocker 1 / Minor 2
 B Consistency    ⚠️ Blocker 1
-C Repo Grounding ⚠️ Major 1 (Ask)
+C Repo Grounding ⚠️ Major 1
 D Blind Spots    ⚠️ Major 2
 E Buildability   — not applicable (spec)
 F Scope          ✓ clean
@@ -352,6 +366,9 @@ Rules for the header block:
 - Every one of the ten perspectives appears, in order, always
 - A perspective with no findings shows `✓ clean`; one that does not apply to
   this document type shows `— not applicable (<type>)`
+- The header block counts severities only. Disposition never appears here —
+  the verdict line carries the `Ask` total, and each finding states its own
+  disposition below
 - **The counts on the verdict line must equal the sum of the per-perspective
   counts.** Add them up before emitting; a header that disagrees with its own
   breakdown is exactly the defect perspective B exists to catch
