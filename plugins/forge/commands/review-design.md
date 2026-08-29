@@ -18,10 +18,18 @@ that cannot alter its subject and cannot block on an answer is usable from CI
 or a hook as a gate. `--fix` only decides whether to continue past the report;
 it never changes how the verdict is computed.
 
-One exception sits outside that guarantee: when `<path>` is omitted, target
-resolution may need a single disambiguation question before the review starts
-(Section 2). **For unattended use, always pass an explicit `<path>`** — that
-skips every question in Section 2 and makes the whole run non-interactive.
+Target resolution runs before the review, and it is the one place a question
+can still arise. It asks nothing when the path it ends up with is
+**self-typing** — the path sits under a `specs/` or `plans/` directory, or its
+filename ends in `-design.md`, so the Document type table in Section 2 resolves
+without help. It asks exactly one question otherwise: when `<path>` is omitted
+and the search finds several equally recent candidates, or when the resolved
+path matches none of those patterns.
+
+**For unattended use, pass an explicit, self-typing `<path>`** — for example
+`docs/superpowers/specs/2026-08-29-foo-design.md`. That is the condition under
+which the whole run is non-interactive. A path outside those conventions can
+still need one question about its type.
 
 ## Section 1: Language and arguments
 
@@ -66,8 +74,10 @@ this way are named in the sections below.
 
 Use it. Skip to *Document type* below.
 
-Passing a path is also what makes an unattended run safe: every question in
-this section exists only for the omitted-path case.
+A path given here still goes through *Document type* below, so passing a path
+removes the search questions but not the type question. A path that is
+self-typing — under `specs/` or `plans/`, or ending in `-design.md` — removes
+that one too, and is what an unattended caller should pass.
 
 ### When `<path>` is omitted — staged search
 
@@ -98,6 +108,12 @@ user pick — never pick silently.
 | Path contains `/specs/`, or the filename ends in `-design.md` | `spec` |
 | Path contains `/plans/` | `plan` |
 | Neither | Ask the user with a multiple-choice question |
+
+The `Neither` row is reached from both entry paths: an explicit `<path>` is
+matched on its own text, never trusted for its origin. That is why an
+unattended caller needs a self-typing path rather than merely any path. Do not
+guess the type to avoid asking — reviewing a plan as a spec silently applies
+the wrong perspective set.
 
 ### Spec cross-reference (when the target is a `plan`)
 
