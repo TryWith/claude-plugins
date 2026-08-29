@@ -20,9 +20,9 @@ it never changes how the verdict is computed.
 
 Target resolution runs before the review, and it is the one place a question
 can still arise. It asks nothing when the path it ends up with is
-**self-typing** — the path sits under a `specs/` or `plans/` directory, or its
-filename ends in `-design.md`, so the Document type table in Section 2 resolves
-without help. It asks at most one question per unresolved dimension otherwise:
+**self-typing** — the path sits under a `specs/` or `plans/` directory (not
+both), or its filename ends in `-design.md`, so the Document type table in
+Section 2 resolves without help. It asks at most one question per unresolved dimension otherwise:
 when `<path>` is omitted and the search finds several equally recent
 candidates, or when the resolved path matches none of those patterns.
 
@@ -51,6 +51,12 @@ is translated to `$LANG_CODE` at runtime. The following stay in English and
 are **never** translated — they are machine-readable keys, not prose:
 
 `READY` `NOT READY` `Blocker` `Major` `Minor` `Fix now` `Ask` `Reject`
+`spec` `plan`
+
+`spec` and `plan` are on that list because they are `DOC_TYPE` values, and
+`DOC_TYPE` reaches the output twice — the `(spec)` on the report's header line
+and the `— not applicable (<type>)` rows beneath it. Translating either one
+breaks the same machine-readability the verdict string is kept English for.
 
 Perspective names (`Completeness`, `Consistency`, …) are also emitted in
 English; only their descriptions are translated.
@@ -68,6 +74,13 @@ remains, and the order the two are typed in does not matter. If nothing
 remains, `<path>` was omitted — take the staged search in Section 2. Never
 treat `--fix` itself as a path.
 
+Stripping is not the same as ignoring. `--fix` is the **only** flag this
+command accepts, so any other `--`-prefixed token is a typo, and any second
+remaining token is a second path. Both are errors: name the token and stop
+rather than running on. Silently discarding `--fx` runs a report-only pass
+while the user believes fixes are being applied — the one failure mode where
+saying nothing is worse than refusing.
+
 **Values do not survive between bash blocks.** Each block may run as a separate
 shell, so a variable assigned in one block is gone in the next. Do not write
 state files either. Instead, read each value out of the block's output and
@@ -78,8 +91,9 @@ this way are named in the sections below.
 
 ### When `<path>` is given
 
-Use it. If it does not exist or cannot be read, say so and stop — do not fall
-through to the search. Skip to *Document type* below.
+Use it. If it is not a readable **regular file** — missing, a directory, or
+unreadable — say so and stop; do not fall through to the search. Skip to
+*Document type* below.
 
 A path given here still goes through *Document type* below, so passing a path
 removes the search questions but not the type question. A path that is
@@ -104,9 +118,26 @@ find docs/superpowers/specs docs/superpowers/plans -name '*.md' -type f 2>/dev/n
 find docs -type f -name '*.md' \
   \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \) \
   2>/dev/null | sort
+
+# Stage 3 — the same shape anywhere in the repository. Stage 2 is capped at
+# docs/, but the preference that overrides the default location can move the
+# directory out of docs/ entirely (design/, notes/plans/). Prune dot-directories
+# and node_modules: without the prune this walks .git, agent scratch
+# directories and dependency trees. `-path './.*'` rather than `-name '.*'`,
+# because the start point `.` matches the latter and would prune everything.
+find . \( -type d \( -path './.*' -o -name node_modules \) \) -prune -o \
+  -type f -name '*.md' \
+  \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \) \
+  -print 2>/dev/null | sort
 ```
 
-If both stages come up empty, report the directories you searched, ask the user
+Stage 3 is a wide net: `*design*` and `*plan*` match any path that merely
+contains the word, this command's own file included. **Never take a Stage 3
+candidate silently** — put its candidates to the user as a multiple-choice
+question even when only one came back. Stages 1 and 2 match a convention;
+Stage 3 matches a guess.
+
+If every stage comes up empty, report the directories you searched, ask the user
 to pass an explicit path, and stop. Do not guess.
 
 When several candidates exist, prefer the newest date in the filename. `sort`
@@ -117,11 +148,21 @@ multiple-choice question and let the user pick — never pick silently.
 
 ### Document type
 
-| Condition | Type |
-|-----------|------|
-| Path contains `/specs/`, or the filename ends in `-design.md` | `spec` |
-| Path contains `/plans/` | `plan` |
-| Neither | Ask the user with a multiple-choice question |
+| # | Condition | Type |
+|---|-----------|------|
+| 1 | Path contains `/plans/` | `plan` |
+| 2 | Path contains `/specs/`, or the filename ends in `-design.md` | `spec` |
+| 3 | Neither | Ask the user with a multiple-choice question |
+
+**Rows are tested top to bottom and the first match wins.** The directory is
+tested before the filename on purpose: `docs/superpowers/plans/2026-08-29-foo-design.md`
+matches both rows 1 and 2, and its directory is the stronger signal. Without a
+stated order that path resolves to `spec` as readily as to `plan` — a plan
+reviewed as a spec, which is the exact failure the paragraph below warns about,
+reached silently because the path still counts as self-typing.
+
+A path containing **both** a `specs/` and a `plans/` component matches row 1
+but has no stronger signal either way. Treat it as row 3 and ask.
 
 The `Neither` row is reached from both entry paths: an explicit `<path>` is
 matched on its own text, never trusted for its origin. That is why an
@@ -221,19 +262,32 @@ This is the one perspective that reads outside the document. Check the claims
 the document makes about the repository:
 
 ```bash
-# Do the paths the document names actually exist? Check them all in one block,
-# and always quote — these paths come from the document, so they may contain
-# spaces or shell metacharacters and must never be interpolated bare.
-for p in "<path 1 named in the document>" "<path 2>"; do
+# Do the paths the document names actually exist? Check them all in one block.
+# These paths come from the document, so they are *data*, never script text:
+# feed them on stdin through a quoted heredoc. Quoting the delimiter
+# (`<<'PATHS'`) is what makes the body literal. Double quotes are NOT enough —
+# `$(...)`, backticks and `${...}` still expand inside them, and a path
+# containing a `"` closes the string, so a document that names
+# `$(rm -rf ~)` as a file would run it.
+while IFS= read -r p; do
+  [ -n "$p" ] || continue
   if [ -e "$p" ]; then echo "ok      $p"; else echo "MISSING $p"; fi
-done
+done <<'PATHS'
+<path 1 named in the document>
+<path 2>
+PATHS
 
-# What conventions does this repository document? Read the root file and any
-# CLAUDE.md governing a directory the document touches — a nested one only
-# applies to files at or below it.
-find . -name 'CLAUDE.md' -not -path './.git/*' 2>/dev/null
-cat CLAUDE.md 2>/dev/null
+# What conventions does this repository document? Prune the trees a CLAUDE.md
+# never governs, and match the local variant too.
+find . \( -name .git -o -name node_modules \) -prune -o \
+  -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) -print 2>/dev/null
 ```
+
+Read the root file, every file the `find` reported that governs a directory the
+document touches — a nested one only applies to files at or below it — and
+`~/.claude/CLAUDE.md` if it exists, which governs everything. If a path from
+the document contains a newline or a line equal to `PATHS`, check that one with
+the Read tool instead of the block above.
 
 **A mismatch between the document and the repository is an `Ask`, not a
 `Fix now`.** Deciding whether the document is wrong or the repository is wrong
@@ -353,6 +407,21 @@ the findings list with its one-line reason and nothing else. Counting it would
 pin the document at `NOT READY` over a finding you yourself declared bogus,
 with nothing to write that could ever clear it.
 
+**A degraded review must not report `READY`.** When `FORMAT_OK` is `0`, or the
+target is a `plan` whose companion spec was not found, perspectives were
+*skipped*, not passed — and the verdict string is all a hook or CI job reads,
+so the caveat Section 5 prints above it never reaches them. Record the
+degradation as a finding so it flows through the formula above instead of
+becoming a special case in it:
+
+| Degradation | Finding to record |
+|-------------|-------------------|
+| `FORMAT_OK` is `0` | `Blocker`, `A Completeness`, `§whole`, disposition `Ask` |
+| a `plan` with no companion spec | `Major`, `F Scope`, `§whole`, disposition `Ask` |
+
+Both then count in the header block like any other finding, and a user who
+disagrees answers the `Ask` with "keep the document as written".
+
 Without `--fix` no `Ask` is ever put to the user, so any `Ask` at all leaves the
 verdict at `NOT READY`. That is correct: "there are design decisions still
 yours to make" is not a ready state.
@@ -438,8 +507,11 @@ Rules for the header block:
 - The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
   verbatim. A bare `/forge:review-design --fix` re-runs the staged search and
   can land on a different document than the one this report is about
-- **The hint is printed only when `FIX_MODE` is `0`.** A run that is already
-  applying fixes must not tell the reader to pass `--fix`
+- **The hint is printed only when `FIX_MODE` is `0` and the report carries at
+  least one `Fix now` or `Ask`.** A run that is already applying fixes must not
+  tell the reader to pass `--fix`, and neither must a report with nothing for a
+  fix pass to do — on a `READY` report with no findings, `--fix` would re-read
+  the document, ask nothing, write nothing and re-emit this same report
 
 Each finding is four lines: `[Severity] location Perspective`, then the
 finding, then `→` and the consequence, then the disposition with a short
@@ -464,6 +536,13 @@ in Section 2 is the only step that can ask, and only for a path that is not
 self-typing. Print the `--fix` hint and stop.
 
 When `FIX_MODE` is `1`, continue to Section 6.
+
+One thing does still follow the report on the report-only exit: when
+`DOC_TYPE` is `plan` and `VERDICT` is `READY`, emit Section 8's *Handing off to
+implementation* block before stopping. Report-only is the mode a gate runs in,
+so it is the mode most likely to produce the `READY` plan that block exists
+for; leaving it reachable only under `--fix` hides the next step from every run
+that had nothing to fix.
 
 ## Section 6: Resolving Ask items
 
@@ -593,19 +672,41 @@ for it. Settled means it will not be put to the user again. It stays
 `finalize.md` carries the same rule for the same reason — without it the loop
 ping-pongs on one contested finding until the cap fires.
 
+A **new `Fix now`, at any severity**, needs no question, so it does not go back
+to Section 6 — it goes back to **Section 7** and is applied in the next batch.
+Both return paths cost a pass and are counted below. Section 4 promises that
+every `Fix now` is applied automatically under `--fix`; routing only
+`Blocker`/`Major`/`Ask` back would break that promise for a `Minor` `Fix now`
+the re-review turned up, and drop it without a word. If the cap fires with
+`Fix now` items still unapplied, **list them in the completion output** rather
+than dropping them.
+
 Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
 bash block may run as a separate shell, and this command writes no state files.
 Start it at 1 the first time you reach this section, and add one each time you
-return to it, and check it against the cap before going back to Section 6.
+return to it, and check it against the cap before going back to Section 6 or 7.
+
+The count is the **one** carried value with no anchor outside your context:
+`TARGET_FILE` is on disk, the answers were typed by the user, but the count is
+only remembered. So print it — `pass n/<cap>` — every time you arrive here, and
+it survives in the transcript: the number of *Re-review after fixes* headers
+already emitted is the count, recoverable by reading back. **If you cannot
+establish it, treat it as at the cap and exit**, the same fail-closed rule the
+guard below applies to the cap itself.
 
 ```bash
-# Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or zero
-# value must fail *closed* — fall back to the default rather than looping
-# unbounded or never looping at all. `finalize.md` guards its counter the same
-# way, and for the same reason.
+# Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or
+# zero-valued setting must fail *closed* — fall back to the default rather than
+# looping unbounded or never looping at all. `finalize.md` applies the same
+# fail-closed rule when it reads its counter back from disk.
 MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
-case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*|0) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
+# `case` rejects the empty and non-numeric values; the `-gt 0` test then rejects
+# the zero-valued ones `case` cannot enumerate — `0` is one pattern, but `00`
+# and `000` are numeric, pass the pattern, and compare equal to zero, which
+# would put the very first pass at the cap and stop the loop before it ran.
+case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
+[ "$MAX_DESIGN_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_DESIGN_REVIEW_LOOP=3
 echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
 ```
 
@@ -638,6 +739,11 @@ Applied:
 
 Review the changes with: git diff -- <target file>
 ```
+
+When Section 7 wrote nothing, items 2 and 3 have no subject: emit the verdict,
+say in one line that no change was needed, and print no `Applied:` list and no
+`git diff` pointer. An empty bullet list under `Applied:` and a diff pointer at
+an unchanged file both read as "something happened here" when nothing did.
 
 `git diff` reports tracked files only. Design documents often sit in an ignored
 or untracked directory — this repository ignores `docs/superpowers/`, for one —

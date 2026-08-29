@@ -67,6 +67,7 @@ behavior), not encoded in shell. Priority order (highest first):
 | File and command names | ❌ | `/forge:finalize` etc. are proper nouns |
 | Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
 | Verdict, severity and disposition labels | ❌ | `READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject` — machine-readable keys: verdict and severity from `/forge:review-design`, dispositions shared by `/forge:review-design` (`Fix now` / `Ask` / `Reject`) and `/forge:finalize` (`Fix now` / `Defer` / `Reject`) |
+| Document type keys | ❌ | `spec`, `plan` — `/forge:review-design` emits them on its report header line and in its `— not applicable (<type>)` rows |
 
 ### Translation policy
 
