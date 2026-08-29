@@ -71,7 +71,8 @@ unresolved `Ask` remain.
 
 By default it is report-only and changes nothing, which makes it safe to run
 from a hook or CI. Pass `--fix` to have it put the design decisions to you as
-multiple-choice questions and then apply the answers.
+multiple-choice questions and then apply the answers — findings with a
+uniquely determined answer (`Fix now`) are applied without being asked.
 
 ```bash
 # Report on the newest design document
@@ -195,7 +196,8 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 判定します。
 
 既定ではレポートのみでファイルを変更しないため、フックや CI から安全に実行
-できます。`--fix` を付けると設計判断を選択式で質問し、回答を反映します。
+できます。`--fix` を付けると設計判断を選択式で質問し、回答を反映します。回答が
+一意に定まる指摘（`Fix now`）は質問せずそのまま適用されます。
 
 ```bash
 # 最新の設計書をレポート
@@ -317,7 +319,8 @@ export FORGE_LANG=en
 `Blocker`、`Major` 和未解决的 `Ask` 全部为 0 时才判定为 `READY`。
 
 默认仅输出报告、不修改文件，因此可以安全地从 hook 或 CI 调用。加上 `--fix`
-后，它会以选择题形式询问设计决策并应用你的回答。
+后，它会以选择题形式询问设计决策并应用你的回答；其中答案唯一确定的发现
+（`Fix now`）会直接应用，无需询问。
 
 ```bash
 # 报告最新的设计文档

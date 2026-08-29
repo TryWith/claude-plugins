@@ -22,9 +22,9 @@ Target resolution runs before the review, and it is the one place a question
 can still arise. It asks nothing when the path it ends up with is
 **self-typing** — the path sits under a `specs/` or `plans/` directory, or its
 filename ends in `-design.md`, so the Document type table in Section 2 resolves
-without help. It asks exactly one question otherwise: when `<path>` is omitted
-and the search finds several equally recent candidates, or when the resolved
-path matches none of those patterns.
+without help. It asks at most one question per unresolved dimension otherwise:
+when `<path>` is omitted and the search finds several equally recent
+candidates, or when the resolved path matches none of those patterns.
 
 **For unattended use, pass an explicit, self-typing `<path>`** — for example
 `docs/superpowers/specs/2026-08-29-foo-design.md`. That is the condition under
@@ -72,7 +72,8 @@ this way are named in the sections below.
 
 ### When `<path>` is given
 
-Use it. Skip to *Document type* below.
+Use it. If it does not exist or cannot be read, say so and stop — do not fall
+through to the search. Skip to *Document type* below.
 
 A path given here still goes through *Document type* below, so passing a path
 removes the search questions but not the type question. A path that is
@@ -97,9 +98,10 @@ find docs -type f -name '*.md' \( -name '*design*' -o -name '*plan*' \) 2>/dev/n
 If both stages come up empty, report the directories you searched, ask the user
 to pass an explicit path, and stop. Do not guess.
 
-When several candidates exist, prefer the newest date in the filename. If two
-or more share that date, present them as a multiple-choice question and let the
-user pick — never pick silently.
+When several candidates exist, prefer the newest date in the filename. A
+candidate whose filename carries no date sorts last. If two or more share that
+date, present them as a multiple-choice question and let the user pick — never
+pick silently.
 
 ### Document type
 
@@ -155,8 +157,8 @@ later commands:
 | `TARGET_FILE` | `docs/superpowers/specs/2026-08-29-foo-design.md` |
 | `DOC_TYPE` | `spec` |
 | `SPEC_FILE` | (empty for a spec; the companion path for a plan) |
-| `FIX_MODE` | `0` |
-| `FORMAT_OK` | `1` |
+| `FIX_MODE` | `0` — set to `1` when `--fix` was passed |
+| `FORMAT_OK` | `1` — set to `0` when the format check found no `##` headings |
 
 Then continue to Section 3.
 
@@ -175,11 +177,15 @@ dependencies.
 | C | `Repo Grounding` | Do referenced files and directories exist? Are assumed dependencies declared? Does anything contradict a convention written in `CLAUDE.md`? | ◎ | ○ |
 | D | `Blind Spots` | Error handling / test strategy / migration and backward compatibility / security and permissions / observability / concurrency and idempotency / rollback | ◎ | ○ |
 | E | `Buildability` | Task granularity, dependency ordering, whether an implementer could follow it without getting stuck | – | ◎ |
-| F | `Scope` | Too large for one plan (propose decomposition); features present that the spec does not call for; scope boundary stated | ○ | ◎ |
+| F | `Scope` | Too large for one plan (propose decomposition); scope boundary stated; and when a companion spec was found, coverage in both directions — every spec requirement maps to at least one task, and no task exceeds what the spec calls for | ○ | ◎ |
 | G | `Assumptions` | Are unverified assumptions (traffic, external API behaviour, performance targets) stated, and is a basis given? | ◎ | ○ |
 | H | `Alternatives` | Is there a record of why this approach, and what was rejected and why? | ◎ | – |
 | I | `YAGNI` | Features not needed now, abstractions built for a hypothetical future, unused extension points | ◎ | ○ |
 | J | `Acceptance` | Is it stated what "done" means and how it will be verified? | ◎ | ◎ |
+
+Where two perspectives could both claim a finding — a missing test-strategy
+section is both an empty section and a blind spot — file it under exactly one,
+and prefer the more specific.
 
 ### Run every perspective, including the clean ones
 
@@ -269,6 +275,23 @@ Examples:
 be checked mechanically. That `Blocker` is objective while `Major` carries
 judgement is not a coincidence.
 
+**Typical severity by perspective.** Use this to stay consistent across runs;
+it is a default, not a straitjacket, and the consequence you wrote for the
+finding always wins over the table.
+
+| Perspective | Typical severity |
+|-------------|------------------|
+| A `Completeness` | TBD and empty sections → `Blocker`; vague words → `Major` |
+| B `Consistency` | Contradictory numbers or names → `Blocker`; terminology drift → `Minor` |
+| C `Repo Grounding` | A referenced path that does not exist → `Blocker`; a convention violated → `Major` |
+| D `Blind Spots` | Nearly always `Major` |
+| E `Buildability` | A task that cannot be followed → `Blocker`; coarse granularity → `Major` |
+| F `Scope` | Too large to plan as one unit → `Blocker`; a feature the spec does not call for → `Major` |
+| G `Assumptions` | An assumption that is false → `Blocker`; one left unverified → `Major` |
+| H `Alternatives` | `Minor` |
+| I `YAGNI` | `Major` or `Minor` |
+| J `Acceptance` | `Major` |
+
 ### Disposition — who decides
 
 | Label | Condition | Effect |
@@ -296,6 +319,13 @@ READY      ⟺  Blocker 0  AND  Major 0  AND  unresolved Ask 0
 NOT READY  ⟺  anything else
 ```
 
+A `Reject` leaves the counts alone. A finding you judged a false positive is
+not a defect in the document, so it contributes to no severity total on the
+verdict line and to no perspective's row in the header block — it appears in
+the findings list with its one-line reason and nothing else. Counting it would
+pin the document at `NOT READY` over a finding you yourself declared bogus,
+with nothing to write that could ever clear it.
+
 Without `--fix` no `Ask` is ever put to the user, so any `Ask` at all leaves the
 verdict at `NOT READY`. That is correct: "there are design decisions still
 yours to make" is not a ready state.
@@ -307,8 +337,10 @@ string is stable enough for a hook or CI job to read later. That is also why
 
 ### What to carry forward
 
-Section 6 consumes these. Report them to yourself before emitting the report,
-and substitute them literally into later work:
+Sections 5 to 8 consume these — Section 6 takes `ASK_ITEMS`, Section 7 takes
+`FIX_ITEMS`, and `VERDICT` is what Sections 5 and 8 report. Report them to
+yourself before emitting the report, and substitute them literally into later
+work:
 
 | Value | Content |
 |-------|---------|
@@ -372,6 +404,8 @@ Rules for the header block:
 - **The counts on the verdict line must equal the sum of the per-perspective
   counts.** Add them up before emitting; a header that disagrees with its own
   breakdown is exactly the defect perspective B exists to catch
+- Every finding appears in the findings list, not just the ones shown in the
+  example above — the example is abridged
 
 Each finding is four lines: `[Severity] location Perspective`, then the
 finding, then `→` and the consequence, then the disposition with a short
@@ -459,13 +493,19 @@ Record each answer against its finding. Do not apply anything yet.
 Once **every** `Ask` in the document has an answer, apply the answers together
 with every `Fix now` in a **single pass** over the file.
 
-Writing exactly once per pass is deliberate. The file is only ever rewritten in
-full: a session interrupted anywhere in Sections 3-6 leaves it exactly as the
-previous pass left it, and a completed write applies every answer at once.
+Writing exactly once per pass is deliberate. The file is only ever changed as
+one batch of targeted edits: a session interrupted anywhere in Sections 3-6
+leaves it exactly as the previous pass left it, and a completed write applies
+every answer at once.
 Either way the document on disk is complete and self-consistent — there is
 never a half-edited state to recover, which is why this command keeps no state
 files. (This is what makes it different from `finalize.md`, whose loop commits
 and pushes on every iteration and therefore does need `.git/forge/` state.)
+
+If there is nothing to apply — no `Ask` was answered with a change and
+`FIX_ITEMS` is empty — **write nothing** and go straight to Section 8. A clean
+document is the expected happy path, and rewriting it to change nothing is not
+a no-op: it risks paraphrasing prose no finding asked you to touch.
 
 Rules:
 
@@ -482,22 +522,29 @@ After writing, continue to Section 8.
 
 ### Loop
 
-Re-run Sections 3 through 5 against the written file, then compare what it
-found against what this run has already settled.
+Re-run Sections 3 and 4 against the written file and re-emit Section 5's
+report, then compare what it found against what this run has already settled.
+You are using those sections as a subroutine: **their own routing does not
+apply here.** Section 5's closing line sends a `--fix` run to Section 6, and
+Section 5's `--fix` hint is for the report-only exit — on this path, ignore
+both and come back to this section.
 
-Go back to Section 6 only for a `Blocker` or `Major` finding that is **new** —
-one this run has neither resolved nor had declined. A finding whose `Ask` the
-user answered with "keep the document as written" is neither: it is settled, it
-stays settled, and it will be re-detected on every later pass precisely because
-nothing was written for it. Restate its recorded outcome and move on.
+Go back to Section 6 only for something **new** — a `Blocker` or `Major`
+finding, or an `Ask` at any severity — meaning one this run has neither
+resolved nor had declined. A finding whose `Ask` the user answered with "keep
+the document as written" is neither: it is settled, it stays settled, and it
+will be re-detected on every later pass precisely because nothing was written
+for it. Settled means it will not be put to the user again. It stays
+**unresolved** for the verdict — a declined `Ask` keeps the document at
+`NOT READY`. Restate its recorded outcome and move on.
 `finalize.md` carries the same rule for the same reason — without it the loop
 ping-pongs on one contested finding until the cap fires.
 
 Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
 bash block may run as a separate shell, and this command writes no state files.
-Increment it each time you re-enter this section, and check it against the cap
-before going back to Section 6.
+Start it at 1 the first time you reach this section, and add one each time you
+return to it, and check it against the cap before going back to Section 6.
 
 ```bash
 echo "Iteration cap: ${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
