@@ -59,6 +59,35 @@ It will then:
 |---------|---------|
 | `/forge:finalize` | Full workflow |
 | `/forge:watch` | PR watch loop only |
+| `/forge:review-design` | Review a superpowers spec or plan before implementation |
+
+`/forge:review-design` reads a design document produced by
+`superpowers:brainstorming` (a spec) or `superpowers:writing-plans` (a plan)
+and reports whether it is ready to implement. It checks ten perspectives —
+completeness, internal consistency, grounding against this repository, blind
+spots, buildability, scope, assumptions, alternatives, YAGNI, and acceptance
+criteria — and reports `READY` only when no `Blocker`, no `Major` and no
+unresolved `Ask` remain.
+
+By default it is report-only and changes nothing, which makes it safe to run
+from a hook or CI. Pass `--fix` to have it put the design decisions to you as
+multiple-choice questions and then apply the answers.
+
+```bash
+# Report on the newest design document
+/forge:review-design
+
+# Review a specific file and apply fixes
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+```
+
+Typical flow with superpowers:
+
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  implementation
+```
 
 ### Multilingual output
 
@@ -156,6 +185,33 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 |---------|------|
 | `/forge:finalize` | フルワークフロー |
 | `/forge:watch` | PR監視ループのみ |
+| `/forge:review-design` | 実装前に superpowers の設計書・実装計画をレビュー |
+
+`/forge:review-design` は `superpowers:brainstorming` が生成した設計書（spec）
+または `superpowers:writing-plans` が生成した実装計画（plan）を読み、実装に
+進んでよいかを判定します。完全性・内部整合性・リポジトリとの整合・抜け観点・
+実装可能性・スコープ・前提の根拠・代替案の痕跡・YAGNI・受け入れ条件の10観点を
+確認し、`Blocker` と `Major` と未解決の `Ask` がすべて 0 のときだけ `READY` と
+判定します。
+
+既定ではレポートのみでファイルを変更しないため、フックや CI から安全に実行
+できます。`--fix` を付けると設計判断を選択式で質問し、回答を反映します。
+
+```bash
+# 最新の設計書をレポート
+/forge:review-design
+
+# ファイルを指定して修正まで実行
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+```
+
+superpowers と組み合わせた典型的な流れ:
+
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  実装
+```
 
 ### 多言語出力
 
@@ -252,6 +308,32 @@ export FORGE_LANG=en
 |------|------|
 | `/forge:finalize` | 完整工作流 |
 | `/forge:watch` | 仅 PR 监控循环 |
+| `/forge:review-design` | 实现前审查 superpowers 的设计文档与实现计划 |
+
+`/forge:review-design` 读取由 `superpowers:brainstorming` 生成的设计文档
+（spec）或由 `superpowers:writing-plans` 生成的实现计划（plan），判断是否
+可以进入实现阶段。它检查十个方面——完整性、内部一致性、与本仓库的一致性、
+遗漏视角、可实现性、范围、前提依据、备选方案记录、YAGNI、验收条件——仅当
+`Blocker`、`Major` 和未解决的 `Ask` 全部为 0 时才判定为 `READY`。
+
+默认仅输出报告、不修改文件，因此可以安全地从 hook 或 CI 调用。加上 `--fix`
+后，它会以选择题形式询问设计决策并应用你的回答。
+
+```bash
+# 报告最新的设计文档
+/forge:review-design
+
+# 指定文件并应用修复
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+```
+
+与 superpowers 配合的典型流程：
+
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  实现
+```
 
 ### 多语言输出
 

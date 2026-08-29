@@ -18,7 +18,7 @@ Official Claude Code plugin catalog from TryWith Inc.
 
 | Plugin | Overview | Commands |
 |--------|----------|----------|
-| [`forge`](./plugins/forge) | Post-implementation workflow orchestrator: commit → PR → code-review/security-review → CI/review watch → auto-fix until merge-ready. | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | Design-document review plus post-implementation workflow orchestration: review spec/plan → commit → PR → code-review/security-review → CI/review watch → auto-fix until merge-ready. | `/forge:review-design`, `/forge:finalize`, `/forge:watch` |
 
 ### Usage
 
@@ -53,7 +53,7 @@ Add new plugins under `plugins/` and register them in `.claude-plugin/marketplac
 
 | プラグイン | 概要 | コマンド |
 |----------|------|---------|
-| [`forge`](./plugins/forge) | 実装完了後のワークフローを一括実行: コミット → PR → コードレビュー・セキュリティレビュー → CI・レビュー監視 → 自動修正でマージ可能まで。 | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | 設計書レビューと実装完了後のワークフローを一括実行: 設計書・計画レビュー → コミット → PR → コードレビュー・セキュリティレビュー → CI・レビュー監視 → 自動修正でマージ可能まで。 | `/forge:review-design`, `/forge:finalize`, `/forge:watch` |
 
 ### 利用方法
 
@@ -88,7 +88,7 @@ TryWith 公司官方 Claude Code 插件目录。
 
 | 插件 | 概要 | 命令 |
 |------|------|------|
-| [`forge`](./plugins/forge) | 一键执行实现后工作流：提交 → PR → 代码评审/安全评审 → CI/评审监控 → 自动修复至可合并。 | `/forge:finalize`, `/forge:watch` |
+| [`forge`](./plugins/forge) | 设计文档评审加上实现后工作流一键执行：评审设计文档/计划 → 提交 → PR → 代码评审/安全评审 → CI/评审监控 → 自动修复至可合并。 | `/forge:review-design`, `/forge:finalize`, `/forge:watch` |
 
 ### 使用方法
 
