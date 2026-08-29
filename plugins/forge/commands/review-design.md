@@ -81,6 +81,12 @@ remains, and the order the two are typed in does not matter. If nothing
 remains, `<path>` was omitted — take the staged search in Section 2. Never
 treat `--fix` itself as a path.
 
+**Quotes group.** A single- or double-quoted argument is **one** token however
+many spaces it holds, so `/forge:review-design "docs/my design/foo.md" --fix`
+resolves to one path; strip the quotes before using the value. Section 5's rule
+that the `--fix` hint quotes a path containing a space has nothing to lean on
+without this, and would print a hint this section then rejects as two paths.
+
 Stripping is not the same as ignoring. `--fix` is the **only** flag this
 command accepts, so any other `--`-prefixed token is a typo, and any second
 remaining token is a second path. Both are errors: name the token and stop
@@ -212,11 +218,15 @@ header line. Resolve the companion spec in this order:
 
 1. The path named on the plan's `Spec:` line
 2. A spec file with the same date and topic in `docs/superpowers/specs/`
-3. The same, in whatever directory the staged search above actually turns up
-   specs in. The preference that overrides the default spec location overrides
-   it for this lookup too; stopping at step 2 reports "no companion spec" for
-   every repository that relocated its specs, and Section 4 turns that into a
-   `Major` the document can never clear
+3. The same, in whatever directory this repository actually keeps its specs.
+   When the staged search above ran, re-use what it turned up. When `<path>`
+   was given it did **not** run — and an explicit path is the recommended
+   unattended form, so that is the common route, not the rare one — so run
+   Stage 2's and Stage 3's `find` yourself and read their `*/specs/*` hits
+   before concluding there is no companion spec. The preference that overrides
+   the default spec location overrides it for this lookup too; stopping at step
+   2 reports "no companion spec" for every repository that relocated its specs,
+   and Section 4 turns that into a `Major` the document can never clear
 
 ```bash
 # `|| true` — a plan with no Spec: line is a fall-through, not a failed block.
@@ -519,8 +529,8 @@ English.
 ── Review: docs/superpowers/specs/2026-08-29-foo-design.md (spec) ──
 Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2
 
-A Completeness   ⚠️ Blocker 1 / Minor 2
-B Consistency    ⚠️ Blocker 1
+A Completeness   ⚠️ Blocker 1 / Minor 1
+B Consistency    ⚠️ Blocker 1 / Minor 1
 C Repo Grounding ⚠️ Major 1
 D Blind Spots    ⚠️ Major 2
 E Buildability   — not applicable (spec)
@@ -566,7 +576,14 @@ Rules for the header block:
   per-perspective counts.** Add them up before emitting; a header that
   disagrees with its own breakdown is exactly the defect perspective B exists
   to catch. `Ask` is a disposition, has no per-perspective row to sum against,
-  and is counted straight off the findings list
+  and is counted straight off the findings list — the **unresolved** `Ask`
+  items only, the same set Section 4's verdict formula reads. An `Ask` answered
+  *keep the document as written* is unresolved and counts; one answered with a
+  change is resolved and does not, even on a re-emitted report where the
+  re-review detected the finding again (Section 8 reports that as an applied
+  change that did not take). Counting the total instead prints `READY` beside a
+  non-zero `Ask`, a verdict line that contradicts itself for the one reader the
+  English string exists for
 - Every finding appears in the findings list, not just the ones shown in the
   example above — the example is abridged
 - The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
@@ -736,7 +753,14 @@ verdict you already have.
 
 Otherwise, re-run Sections 3 and 4 against the written file and re-emit
 Section 5's report, then compare what it found against what this run has
-already settled. Perspective C's two blocks are the exception: the
+already settled. Re-run Section 2's *Format check* as well, and its *Spec
+cross-reference* when the batch touched a plan's `Spec:` line. `FORMAT_OK` and
+`SPEC_FILE` are Section 2 values and Section 4's degradation table reads both,
+so carrying a stale `FORMAT_OK` of `0` into a pass whose batch added the
+missing `##` headings re-records a degradation the edit already cleared, leaves
+`— not checked (format)` rows on perspectives that are now checkable, and
+reports a change that landed as one that did not take. Perspective C's two
+blocks are the exception: the
 path-existence check and the CLAUDE.md `find` read the *repository*, and only
 the document changed since the last pass. Re-use the results you already have,
 and re-run a path check only for a path the batch you just wrote added or
@@ -796,14 +820,19 @@ The count is the **one** carried value with no anchor outside your context:
 only remembered. So print it — literally `pass n/<cap>`, in English, for the
 same reason the labels in Section 1 stay English: this line is read back
 mechanically, and a translated one cannot be. Print it every time you arrive
-here and it survives in the transcript: the highest `pass n/<cap>` line already
-emitted is the count, recoverable by reading back. Count **those** lines, not
-the *Re-review after fixes* headers — that header belongs to *Completion
-output* below and is emitted once, on the way out, so counting it would read
-every pass as the first.
+here and it survives in the transcript. To recover the count on arrival, read
+back every `pass n/<cap>` line emitted **before** this arrival, take the
+highest `n`, and **add one** — that sum is this arrival's count, and it is what
+you print. Do not read the highest `n` as the count itself: it is the
+*previous* arrival's number, so taking it verbatim pins the counter where it
+already stands and lets the loop run past the cap forever. Read only those
+lines, not the *Re-review after fixes* headers — that header belongs to
+*Completion output* below and is emitted once, on the way out, so counting it
+would read every pass as the first.
 
 **No `pass n/<cap>` line yet means this is the first arrival and the count is
-1** — that is the expected state, not a failure to establish it. "Cannot
+1** — the highest `n` is 0 and the rule above adds one, so the two rules agree.
+That is the expected state, not a failure to establish it. "Cannot
 establish" means the lines are there but unreadable or mutually inconsistent.
 **In that case treat the count as at the cap and exit**, the same fail-closed
 rule the guard below applies to the cap itself. Reading an empty transcript as
@@ -866,9 +895,14 @@ Review the changes with: git diff -- <target file>
 ```
 
 When Section 7 wrote nothing, items 2 and 3 have no subject: emit the verdict,
-say in one line that no change was needed, and print no `Applied:` list and no
-`git diff` pointer. An empty bullet list under `Applied:` and a diff pointer at
-an unchanged file both read as "something happened here" when nothing did.
+say in one line **why** nothing was written, and print no `Applied:` list and
+no `git diff` pointer. An empty bullet list under `Applied:` and a diff pointer
+at an unchanged file both read as "something happened here" when nothing did.
+The two reasons are not interchangeable: *no change was needed* when there was
+nothing to apply, and *every proposed change was declined* when the file is
+unchanged because each `Ask` was answered "keep the document as written".
+Reporting the second as the first leaves the `NOT READY` beside it
+unexplained.
 
 `git diff` reports tracked files only. Design documents often sit in an ignored
 or untracked directory — this repository ignores `docs/superpowers/`, for one —

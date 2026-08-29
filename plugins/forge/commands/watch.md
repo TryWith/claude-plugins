@@ -68,6 +68,8 @@ behavior), not encoded in shell. Priority order (highest first):
 | Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
 | Verdict, severity and disposition labels | ❌ | `READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject` — machine-readable keys: verdict and severity from `/forge:review-design`, dispositions shared by `/forge:review-design` (`Fix now` / `Ask` / `Reject`) and `/forge:finalize` (`Fix now` / `Defer` / `Reject`) |
 | Document type keys | ❌ | `spec`, `plan` — `/forge:review-design` emits them on its report header line and in its `— not applicable (<type>)` rows |
+| Perspective names | ❌ | `Completeness`, `Consistency`, `Repo Grounding`, `Blind Spots`, `Buildability`, `Scope`, `Assumptions`, `Alternatives`, `YAGNI`, `Acceptance` — `/forge:review-design` emits the names in English and translates only their descriptions |
+| Loop-counter lines | ❌ | `pass n/<cap>` — `/forge:review-design` reads its own pass count back out of the transcript by matching this literal, so a translated line is unreadable to it |
 
 ### Translation policy
 

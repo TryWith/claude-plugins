@@ -33,6 +33,13 @@ The following commands must be available before use:
 > at all (not found or disabled), Step 2 is skipped with a warning. In every case
 > nothing else in the workflow changes.
 
+> **About `/forge:review-design`:** it needs none of the commands above — it
+> only reads a markdown file, so it runs on a bare Claude Code install. The
+> `superpowers` plugin is optional and only shapes the two ends of the flow: it
+> produces the spec and plan the review reads, and supplies the
+> `superpowers:subagent-driven-development` / `superpowers:executing-plans`
+> skills a `READY` plan is handed off to.
+
 ### Usage
 
 After finishing your implementation, run:
@@ -166,6 +173,13 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 > 自動で再開する。コマンド自体が利用できない場合（未検出・無効化）は警告を出して
 > Step 2 をスキップする。いずれの場合もそれ以外の挙動は変わらない。
 
+> **`/forge:review-design` について:** 上記の依存コマンドはいずれも不要で、
+> Markdown ファイルを読むだけなので素の Claude Code でも動作する。
+> `superpowers` プラグインは任意で、フローの両端にのみ関わる。レビュー対象の
+> 設計書・実装計画を生成するのがこのプラグインであり、`READY` と判定された
+> 実装計画の受け渡し先となる `superpowers:subagent-driven-development` /
+> `superpowers:executing-plans` を提供するのもこのプラグインである。
+
 ### 使い方
 
 実装完了後、以下を実行するだけ:
@@ -294,6 +308,12 @@ export FORGE_LANG=en
 > 仅当被拒绝时才暂停并提示你输入 `/code-review --fix`（每轮评审各一次），完成后
 > 自动恢复流程。若该命令根本不可用（未找到或已禁用），则发出警告并跳过 Step 2。
 > 上述任一情况下其余步骤均不变。
+
+> **关于 `/forge:review-design`:** 它不需要上述任何依赖命令——只读取一个
+> Markdown 文件，因此在原生 Claude Code 上即可运行。`superpowers` 插件是可选的，
+> 只涉及流程的两端：它生成供本命令评审的设计文档与实现计划，并提供判定为
+> `READY` 的实现计划所交接到的 `superpowers:subagent-driven-development` /
+> `superpowers:executing-plans` 技能。
 
 ### 使用方法
 
