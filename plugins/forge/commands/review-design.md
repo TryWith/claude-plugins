@@ -1,5 +1,6 @@
 ---
 description: Review a superpowers design document (spec or plan) and judge whether it is ready for implementation.
+argument-hint: "[<path>] [--fix]"
 ---
 
 # /forge:review-design
@@ -19,12 +20,15 @@ or a hook as a gate. `--fix` only decides whether to continue past the report;
 it never changes how the verdict is computed.
 
 Target resolution runs before the review, and it is the one place a question
-can still arise. It asks nothing when the path it ends up with is
-**self-typing** — the path sits under a `specs/` or `plans/` directory (not
-both), or its filename ends in `-design.md`, so the Document type table in
-Section 2 resolves without help. It asks at most one question per unresolved dimension otherwise:
-when `<path>` is omitted and the search finds several equally recent
-candidates, or when the resolved path matches none of those patterns.
+can still arise. It asks nothing when `<path>` is **given** and is
+**self-typing** — the path has a `specs/` or `plans/` component (not both), or
+its filename ends in `-design.md`, so the Document type table in Section 2
+resolves without help. It asks at most one question per unresolved dimension
+otherwise: when the resolved path matches none of those patterns, when `<path>`
+is omitted and the search finds several candidates it cannot rank, and always
+when the search had to fall through to Stage 3 or to Stage 2's `*design*` /
+`*plan*` guess patterns. Those last are guesses, and Section 2 never takes a
+guess silently, however well the candidate happens to type itself.
 
 **For unattended use, pass an explicit, self-typing `<path>`** — for example
 `docs/superpowers/specs/2026-08-29-foo-design.md`. That is the condition under
@@ -123,19 +127,31 @@ find docs -type f -name '*.md' \
 # docs/, but the preference that overrides the default location can move the
 # directory out of docs/ entirely (design/, notes/plans/). Prune dot-directories
 # and node_modules: without the prune this walks .git, agent scratch
-# directories and dependency trees. `-path './.*'` rather than `-name '.*'`,
-# because the start point `.` matches the latter and would prune everything.
-find . \( -type d \( -path './.*' -o -name node_modules \) \) -prune -o \
+# directories and dependency trees. `-name '.?*'` rather than `-name '.*'`,
+# because the start point `.` matches the latter and would prune everything;
+# `.?*` requires at least one character after the dot, so `.` and `..` are
+# excluded while every real dot-directory matches — at **any** depth, which
+# `-path './.*'` does not: that pattern anchors to the top level and walks a
+# nested `packages/x/.venv` or `docs/.cache` in full.
+find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
   -type f -name '*.md' \
   \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \) \
   -print 2>/dev/null | sort
 ```
 
-Stage 3 is a wide net: `*design*` and `*plan*` match any path that merely
-contains the word, this command's own file included. **Never take a Stage 3
-candidate silently** — put its candidates to the user as a multiple-choice
-question even when only one came back. Stages 1 and 2 match a convention;
-Stage 3 matches a guess.
+`*design*` and `*plan*` are a wide net: they match any path that merely
+contains the word, this command's own file included. **Never take a candidate
+that only those two patterns matched silently** — put it to the user as a
+multiple-choice question even when only one came back, and do the same for every
+Stage 3 candidate however it matched. Stage 1, and a Stage 2 candidate that
+matched `*/specs/*` or `*/plans/*`, sit in a directory the conventions name;
+everything else is a guess, and a guess is confirmed before it is reviewed.
+
+The distinction is not cosmetic, and it is why the rule covers Stage 2 rather
+than Stage 3 alone: a hand-written `docs/architecture-design.md` is a Stage 2 hit
+on `*design*` and then self-types to `spec` on its filename, so a rule that
+exempted Stage 2 would run the whole review against a document that is not a
+design document at all, and never ask.
 
 If every stage comes up empty, report the directories you searched, ask the user
 to pass an explicit path, and stop. Do not guess.
@@ -143,28 +159,44 @@ to pass an explicit path, and stop. Do not guess.
 When several candidates exist, prefer the newest date in the filename. `sort`
 above orders by path, not by date, so read the dates out of the filenames
 yourself — never just take the last line. A candidate whose filename carries no
-date sorts last. If two or more share that date, present them as a
-multiple-choice question and let the user pick — never pick silently.
+date sorts last. If two or more tie for first — the same date, or no date on
+any of them — present them as a multiple-choice question and let the user pick
+— never pick silently. Date-less candidates tie with **each other**: having no
+date is not a date they fail to share, and reading the rule that way leaves a
+directory of undated candidates with no tie-break at all.
 
 ### Document type
 
 | # | Condition | Type |
 |---|-----------|------|
-| 1 | Path contains `/plans/` | `plan` |
-| 2 | Path contains `/specs/`, or the filename ends in `-design.md` | `spec` |
-| 3 | Neither | Ask the user with a multiple-choice question |
+| 0 | The path has **both** a `specs/` and a `plans/` component | Ask the user with a multiple-choice question |
+| 1 | The path has a `plans/` component | `plan` |
+| 2 | The path has a `specs/` component, or the filename ends in `-design.md` | `spec` |
+| 3 | None of the above | Ask the user with a multiple-choice question |
 
-**Rows are tested top to bottom and the first match wins.** The directory is
-tested before the filename on purpose: `docs/superpowers/plans/2026-08-29-foo-design.md`
-matches both rows 1 and 2, and its directory is the stronger signal. Without a
-stated order that path resolves to `spec` as readily as to `plan` — a plan
-reviewed as a spec, which is the exact failure the paragraph below warns about,
-reached silently because the path still counts as self-typing.
+**Rows are tested top to bottom and the first match wins.**
 
-A path containing **both** a `specs/` and a `plans/` component matches row 1
-but has no stronger signal either way. Treat it as row 3 and ask.
+"Component" means a whole path segment, with or without a leading separator:
+`plans/foo.md`, `docs/plans/foo.md` and `./plans/foo.md` all have a `plans/`
+component. Testing for the substring `/plans/` instead would miss the first of
+those — a caller who passes `plans/2026-08-29-foo.md` from the repository root
+gets row 3 and a question, in the run they passed an explicit path precisely to
+keep unattended.
 
-The `Neither` row is reached from both entry paths: an explicit `<path>` is
+The directory is tested before the filename on purpose:
+`docs/superpowers/plans/2026-08-29-foo-design.md` matches both rows 1 and 2, and
+its directory is the stronger signal. Without a stated order that path resolves
+to `spec` as readily as to `plan` — a plan reviewed as a spec, which is the exact
+failure the paragraph below warns about, reached silently because the path still
+counts as self-typing.
+
+Row 0 is in the table for the mirror-image reason. A path carrying both
+components matches row 1, so first-match-wins would resolve it to `plan` on
+nothing but row order, and it has no stronger signal either way. It is a genuine
+ambiguity, and it belongs in the table as a row rather than in prose that a
+mechanical reading of the table skips.
+
+The `None of the above` row is reached from both entry paths: an explicit `<path>` is
 matched on its own text, never trusted for its origin. That is why an
 unattended caller needs a self-typing path rather than merely any path. Do not
 guess the type to avoid asking — reviewing a plan as a spec silently applies
@@ -177,6 +209,11 @@ header line. Resolve the companion spec in this order:
 
 1. The path named on the plan's `Spec:` line
 2. A spec file with the same date and topic in `docs/superpowers/specs/`
+3. The same, in whatever directory the staged search above actually turns up
+   specs in. The preference that overrides the default spec location overrides
+   it for this lookup too; stopping at step 2 reports "no companion spec" for
+   every repository that relocated its specs, and Section 4 turns that into a
+   `Major` the document can never clear
 
 ```bash
 # `|| true` — a plan with no Spec: line is a fall-through, not a failed block.
@@ -201,10 +238,17 @@ own self-review.
 Read the file and check that it has `##` section headings.
 
 If it does not, or the document clearly does not follow the superpowers shape,
-**warn and continue**: state at the top of the report that the document is not
-in the expected format and that some perspectives cannot be applied, then
-review with the ones that can. For findings where a `§n.n` reference is
-impossible, quote the offending line instead.
+set `FORMAT_OK` to `0` and **warn and continue**: state at the top of the report
+that the document is not in the expected format and that some perspectives
+cannot be applied, then review with the ones that can and record which ones you
+had to skip — Section 5's header block has a state for them. For findings where
+a `§n.n` reference is impossible, quote the offending line instead.
+
+Both triggers set the same flag on purpose. `FORMAT_OK` is the only thing
+Section 4's degradation table reads, so a document that keeps its `##` headings
+while following none of the superpowers shape would otherwise warn above the
+verdict line and still be free to report `READY` — the exact outcome that table
+exists to prevent.
 
 ### What to carry forward
 
@@ -217,7 +261,7 @@ later commands:
 | `DOC_TYPE` | `spec` |
 | `SPEC_FILE` | (empty for a spec; the companion path for a plan) |
 | `FIX_MODE` | `0` — set to `1` when `--fix` was passed |
-| `FORMAT_OK` | `1` — set to `0` when the format check found no `##` headings |
+| `FORMAT_OK` | `1` — set to `0` when the format check found no `##` headings, or found the document does not follow the superpowers shape |
 
 Then continue to Section 3.
 
@@ -278,8 +322,11 @@ done <<'PATHS'
 PATHS
 
 # What conventions does this repository document? Prune the trees a CLAUDE.md
-# never governs, and match the local variant too.
-find . \( -name .git -o -name node_modules \) -prune -o \
+# never governs, and match the local variant too. Dot-directories go for the
+# same reason as in Stage 3, and one in particular: `.claude/worktrees/` holds
+# whole checkouts of this repository, each with a root CLAUDE.md that governs
+# that checkout and not the document under review.
+find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
   -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) -print 2>/dev/null
 ```
 
@@ -320,7 +367,7 @@ Every finding carries four fields. Do not collapse them:
 
 | Field | Content |
 |-------|---------|
-| location | `§3.2` for a finding about specific text. `§whole` for a finding about something the document does not contain at all. When `FORMAT_OK` is `0`, quote the offending line instead of citing a section |
+| location | `§3.2` for a finding about specific text. `§whole` for a finding about something the document does not contain at all — including when `FORMAT_OK` is `0`, since an absent thing has no line to quote. When `FORMAT_OK` is `0` and the finding *is* about specific text, quote the offending line instead of citing a section, because the section numbers it would cite do not exist |
 | perspective | The letter and English name, e.g. `A Completeness` |
 | finding | What is wrong — translated to `$LANG_CODE` |
 | consequence | What happens if it is implemented as written — translated to `$LANG_CODE` |
@@ -493,7 +540,11 @@ Rules for the header block:
 
 - Every one of the ten perspectives appears, in order, always
 - A perspective with no findings shows `✓ clean`; one that does not apply to
-  this document type shows `— not applicable (<type>)`
+  this document type shows `— not applicable (<type>)`; one you could not apply
+  because `FORMAT_OK` is `0` shows `— not checked (format)`. `✓ clean` means
+  checked and clean and nothing else — a skipped perspective rendered as clean
+  is precisely the "checked, nothing found" / "not checked" confusion this
+  block exists to prevent
 - The header block counts severities only. Disposition never appears here —
   the verdict line carries the `Ask` total, and each finding states its own
   disposition below
@@ -533,7 +584,9 @@ target file, and do not ask the user anything** — everything from here on is
 report generation, and a report that cannot alter its subject and cannot block
 on an answer is what makes an unattended run possible. Target resolution back
 in Section 2 is the only step that can ask, and only for a path that is not
-self-typing. Print the `--fix` hint and stop.
+self-typing. Print the `--fix` hint — subject to the condition in *Rules for
+the header block* above, which is the only place that decides whether it is
+printed at all — and stop.
 
 When `FIX_MODE` is `1`, continue to Section 6.
 
@@ -661,9 +714,12 @@ apply here.** Section 5's closing line sends a `--fix` run to Section 6, and
 Section 5's `--fix` hint is for the report-only exit — on this path, ignore
 both and come back to this section.
 
-Go back to Section 6 only for something **new** — a `Blocker` or `Major`
-finding, or an `Ask` at any severity — meaning one this run has neither
-resolved nor had declined. A finding whose `Ask` the user answered with "keep
+Go back to Section 6 only for a **new `Ask`, at any severity** — meaning one
+this run has neither resolved nor had declined. Disposition routes here;
+severity does not. A new `Blocker` is a question only when its disposition is
+`Ask`, and a new `Minor` `Ask` is a question just the same — routing on severity
+instead would send a new `Blocker` whose answer is uniquely determined to
+Section 6 with nothing to ask about. A finding whose `Ask` the user answered with "keep
 the document as written" is neither: it is settled, it stays settled, and it
 will be re-detected on every later pass precisely because nothing was written
 for it. Settled means it will not be put to the user again. It stays
@@ -690,10 +746,12 @@ return to it, and check it against the cap before going back to Section 6 or 7.
 The count is the **one** carried value with no anchor outside your context:
 `TARGET_FILE` is on disk, the answers were typed by the user, but the count is
 only remembered. So print it — `pass n/<cap>` — every time you arrive here, and
-it survives in the transcript: the number of *Re-review after fixes* headers
-already emitted is the count, recoverable by reading back. **If you cannot
-establish it, treat it as at the cap and exit**, the same fail-closed rule the
-guard below applies to the cap itself.
+it survives in the transcript: the highest `pass n/<cap>` line already emitted
+is the count, recoverable by reading back. Count **those** lines, not the
+*Re-review after fixes* headers — that header belongs to *Completion output*
+below and is emitted once, on the way out, so counting it would read every pass
+as the first. **If you cannot establish the count, treat it as at the cap and
+exit**, the same fail-closed rule the guard below applies to the cap itself.
 
 ```bash
 # Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or

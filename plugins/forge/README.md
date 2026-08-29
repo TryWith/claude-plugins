@@ -6,7 +6,7 @@
 
 ## English
 
-A Claude Code plugin that orchestrates existing developer commands and takes a PR all the way from creation through CI / review monitoring to auto-fix.
+A Claude Code plugin that reviews your design document before implementation, then orchestrates existing developer commands and takes a PR all the way from creation through CI / review monitoring to auto-fix.
 
 ### Install
 
@@ -139,7 +139,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 ## 日本語
 
-既存の開発系コマンドをオーケストレーションし、PR作成後のCI・レビュー監視・自動修正までを完遂する Claude Code プラグイン。
+実装前の設計書レビューに加え、既存の開発系コマンドをオーケストレーションし、PR作成後のCI・レビュー監視・自動修正までを完遂する Claude Code プラグイン。
 
 ### インストール
 
@@ -268,7 +268,7 @@ export FORGE_LANG=en
 
 ## 中文
 
-将既有开发命令编排起来，从 PR 创建到 CI / 评审监控直至自动修复一并完成的 Claude Code 插件。
+在实现前评审设计文档，并将既有开发命令编排起来，从 PR 创建到 CI / 评审监控直至自动修复一并完成的 Claude Code 插件。
 
 ### 安装
 
