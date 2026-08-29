@@ -391,3 +391,140 @@ in Section 2 is the only step that can ask, and only for a path that is not
 self-typing. Print the `--fix` hint and stop.
 
 When `FIX_MODE` is `1`, continue to Section 6.
+
+## Section 6: Resolving Ask items
+
+Reached only when `FIX_MODE` is `1`.
+
+### Order: Ask before Fix now
+
+Resolve every `Ask` **before** applying any `Fix now`. Design decisions cascade
+into the mechanical edits: deciding "SQLite, not Redis" changes every later
+section that mentions Redis. Applying the mechanical fixes first means redoing
+them.
+
+### One card per section
+
+Walk the document's sections in order. For each section that has `Ask` items,
+put its questions to the user as **one multiple-choice card, at most four
+questions**. Sections with no `Ask` items produce no card. If a section has
+more than four, take the four highest-severity ones and put the rest on the
+next card for that section.
+
+Grouping by section keeps related questions together, and most documents only
+have `Ask` items in a couple of sections.
+
+### Building the choices
+
+Every question offers between two and four choices, and **must** include both
+of these:
+
+- **Match the repository** — change the document to agree with what is
+  actually there
+- **Keep the document as written** — leave it alone. State plainly that the
+  finding stays unresolved and the verdict stays `NOT READY`
+
+Fill the remaining slots with concrete alternatives. Give every choice a
+one-line consequence.
+
+```
+Q1 [§3.2] The state storage mechanism is TBD
+
+  ○ Use the existing SQLite store
+     → no new dependency; follows the pattern already in db/
+
+  ○ Introduce Redis
+     → one more dependency; operators must run Redis
+
+  ○ Write to a file directly
+     → simplest; weak under concurrent writes
+
+  ○ Keep the document as written (leave TBD)
+     → stays unresolved; verdict remains NOT READY
+```
+
+"Keep the document as written" is not filler. Without it the reviewer's
+proposals become one-sided and the user has no supported way to stand by what
+they wrote. If the user answers with free text instead, take it as given.
+
+Record each answer against its finding. Do not apply anything yet.
+
+## Section 7: Applying changes
+
+Once **every** `Ask` in the document has an answer, apply the answers together
+with every `Fix now` in a **single pass** over the file.
+
+Writing exactly once is deliberate. If the session is interrupted at any point
+before this section, the target file is untouched — there is no half-edited
+document to recover, which is why this command keeps no state files. (This is
+what makes it different from `finalize.md`, whose loop commits and pushes on
+every iteration and therefore does need `.git/forge/` state.)
+
+Rules:
+
+- An `Ask` answered with "keep the document as written" produces **no edit**.
+  The finding stays open.
+- A `Reject` produces no edit.
+- Preserve the document's existing heading structure and style. Do not reformat
+  sections you are not changing.
+- If the write fails, **stop and report**. Never continue past a partial write.
+
+After writing, continue to Section 8.
+
+## Section 8: Re-review and exit
+
+### Loop
+
+Re-run Sections 3 through 5 against the written file. If new `Blocker` or
+`Major` findings appear, go back to Section 6.
+
+```bash
+MAX_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
+echo "Iteration cap: $MAX_LOOP"
+```
+
+The cap is 3 by default — lower than the review loop in `finalize.md`, which
+allows 10. Code has CI as an outside judge; a design document does not. Each
+extra pass is the same context re-reading prose it just wrote, and the returns
+fall off quickly. **The only information entering the loop from outside is the
+answers the user gave.**
+
+On reaching the cap, report the current verdict — which will be `NOT READY` —
+and exit **normally**. Hitting the cap is a result, not an error.
+
+### Completion output
+
+Emit three things:
+
+1. The verdict from the final re-review
+2. A bulleted summary of what changed
+3. A pointer to `git diff` for the details
+
+```
+── Re-review after fixes ──
+Verdict: ✅ READY   Blocker 0 / Major 0 / Minor 1 / Ask 0
+
+Applied:
+  • §3.2  state storage: TBD → SQLite (your answer)
+  • §3    retry count: unified on 3 (§2 was authoritative)
+  • §7    added a test strategy section
+  • §6.3  unified "job" / "task" terminology
+
+Review the changes with: git diff <target file>
+```
+
+### Handing off to implementation
+
+When — and only when — the target was a `plan` **and** the final verdict is
+`READY`, offer the two ways to execute it:
+
+```
+To implement this plan:
+  1. superpowers:subagent-driven-development (recommended)
+     — a fresh subagent per task, reviewed between tasks
+  2. superpowers:executing-plans
+     — run the tasks in this session with checkpoints
+```
+
+Do not offer this on `NOT READY`. The document still needs work, and offering
+the next step anyway undercuts the point of having a verdict.
