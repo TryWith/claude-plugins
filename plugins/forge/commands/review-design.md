@@ -158,4 +158,84 @@ later commands:
 | `FIX_MODE` | `0` |
 | `FORMAT_OK` | `1` |
 
-Then announce the resolution to the user and stop.
+Then continue to Section 3.
+
+## Section 3: Review perspectives
+
+Read the whole document, then apply all ten perspectives below **in order**, in
+this single context. Do not dispatch subagents — this command has no external
+dependencies.
+
+`◎` = primary for this document type, `○` = applies, `–` = not applicable.
+
+| # | Perspective | What to look for | spec | plan |
+|---|-------------|------------------|:----:|:----:|
+| A | `Completeness` | TBD / TODO / empty sections / placeholders / vague words ("appropriately", "as needed", "etc.") | ○ | ◎ |
+| B | `Consistency` | Contradictory numbers, names or ordering across sections; drifting terminology; type and signature mismatches between tasks | ◎ | ◎ |
+| C | `Repo Grounding` | Do referenced files and directories exist? Are assumed dependencies declared? Does anything contradict a convention written in `CLAUDE.md`? | ◎ | ○ |
+| D | `Blind Spots` | Error handling / test strategy / migration and backward compatibility / security and permissions / observability / concurrency and idempotency / rollback | ◎ | ○ |
+| E | `Buildability` | Task granularity, dependency ordering, whether an implementer could follow it without getting stuck | – | ◎ |
+| F | `Scope` | Too large for one plan (propose decomposition); features present that the spec does not call for; scope boundary stated | ○ | ◎ |
+| G | `Assumptions` | Are unverified assumptions (traffic, external API behaviour, performance targets) stated, and is a basis given? | ◎ | ○ |
+| H | `Alternatives` | Is there a record of why this approach, and what was rejected and why? | ◎ | – |
+| I | `YAGNI` | Features not needed now, abstractions built for a hypothetical future, unused extension points | ◎ | ○ |
+| J | `Acceptance` | Is it stated what "done" means and how it will be verified? | ◎ | ◎ |
+
+### Run every perspective, including the clean ones
+
+Apply all ten even when you expect nothing. The report lists every perspective
+by name, so a reader can tell "checked, nothing found" apart from "not
+checked". A perspective that does not apply to this document type is reported
+as not applicable, not omitted.
+
+### Perspective C: grounding against the repository
+
+This is the one perspective that reads outside the document. Check the claims
+the document makes about the repository:
+
+```bash
+# Do the paths the document names actually exist?
+# Run this for each path the document references.
+ls -la <path named in the document>
+
+# What conventions does this repository document?
+cat CLAUDE.md 2>/dev/null
+```
+
+**A mismatch between the document and the repository is an `Ask`, not a
+`Fix now`.** Deciding whether the document is wrong or the repository is wrong
+is the user's call, and the answer often runs the other way — bringing the
+document in line with reality rather than the reverse. Rewriting a deliberate
+choice because a document disagreed with it is a real failure mode this rule
+exists to prevent.
+
+### Perspective H: why this is checkable at all
+
+`superpowers:brainstorming` makes "Propose 2-3 approaches with trade-offs" a
+required step of its architectural path. A spec with no trace of rejected
+alternatives is therefore evidence that a step was skipped — a mechanically
+detectable signal. Perspective I likewise corresponds to brainstorming's
+"YAGNI ruthlessly - remove unnecessary features from every approach and
+design".
+
+Neither check would be writable for a general-purpose document reviewer. They
+work here because the document's provenance is known.
+
+### Direction
+
+A–E, G and J look for what is **missing**. F and I look for what is
+**excessive**. A reviewer that only looks one way makes documents grow every
+time its advice is followed; both directions are required.
+
+### Recording a finding
+
+Every finding carries four fields. Do not collapse them:
+
+| Field | Content |
+|-------|---------|
+| location | `§3.2`. When `FORMAT_OK` is `0`, quote the offending line instead |
+| perspective | The letter and English name, e.g. `A Completeness` |
+| finding | What is wrong — translated to `$LANG_CODE` |
+| consequence | What happens if it is implemented as written — translated to `$LANG_CODE` |
+
+The consequence field is not decoration: Section 4 assigns severity from it.
