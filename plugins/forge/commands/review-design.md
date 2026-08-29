@@ -367,7 +367,10 @@ could not be found, say so **above** the verdict line.
 ### Where to stop
 
 When `FIX_MODE` is `0`, the report is the whole output. **Do not modify the
-target file, and do not ask the user anything** — report-only mode is
-non-interactive so it can run unattended. Print the `--fix` hint and stop.
+target file, and do not ask the user anything** — everything from here on is
+report generation, and a report that cannot alter its subject and cannot block
+on an answer is what makes an unattended run possible. Target resolution back
+in Section 2 is the only step that can ask, and only for a path that is not
+self-typing. Print the `--fix` hint and stop.
 
 When `FIX_MODE` is `1`, continue to Section 6.
