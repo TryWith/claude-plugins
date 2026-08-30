@@ -134,7 +134,11 @@ export FORGE_LANG=en
 
 See the **Language preamble & i18n contract** section at the top of [`commands/watch.md`](./commands/watch.md) for the full spec.
 
-> **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji stay shared across all languages.
+> **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji
+> stay shared across all languages, and so do `/forge:review-design`'s
+> machine-readable keys — the `Verdict:` prefix, `READY` / `NOT READY`,
+> `Blocker` / `Major` / `Minor`, `Fix now` / `Ask` / `Reject`, `spec` / `plan`,
+> the ten perspective names, and the `pass n/<cap>` counter line.
 
 ### Requirements
 
@@ -271,7 +275,11 @@ export FORGE_LANG=en
 
 詳細は [`commands/watch.md`](./commands/watch.md) 冒頭の **Language preamble & i18n contract** セクションを参照。
 
-> **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は全言語共通で維持されます。
+> **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は
+> 全言語共通で維持されます。`/forge:review-design` の機械可読キー —
+> `Verdict:` プレフィックス、`READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、
+> `Fix now` / `Ask` / `Reject`、`spec` / `plan`、10観点の名称、`pass n/<cap>` の
+> カウンタ行 — も同様に英語のまま出力されます。
 
 ### 前提条件
 
@@ -404,7 +412,10 @@ export FORGE_LANG=en
 
 详情请参阅 [`commands/watch.md`](./commands/watch.md) 顶部的 **Language preamble & i18n contract** 章节。
 
-> **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中保持一致。
+> **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中
+> 保持一致。`/forge:review-design` 的机器可读键——`Verdict:` 前缀、
+> `READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、`Fix now` / `Ask` / `Reject`、
+> `spec` / `plan`、十个观察视角的名称，以及 `pass n/<cap>` 计数行——同样保持英文。
 
 ### 前提条件
 

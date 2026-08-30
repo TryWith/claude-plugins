@@ -57,8 +57,14 @@ All user-facing prose (findings, reasons, choice labels, progress messages)
 is translated to `$LANG_CODE` at runtime. The following stay in English and
 are **never** translated — they are machine-readable keys, not prose:
 
-`READY` `NOT READY` `Blocker` `Major` `Minor` `Fix now` `Ask` `Reject`
-`spec` `plan`
+`Verdict:` `READY` `NOT READY` `Blocker` `Major` `Minor` `Fix now` `Ask`
+`Reject` `spec` `plan`
+
+`Verdict:` is on the list for a reason the labels after it do not need: it is
+the *prefix* a hook or CI job anchors the verdict line on, and Section 4
+promises that prefix is fixed. Translate it and the line still ends in an
+English `READY` or `NOT READY`, but the caller looking for `^Verdict:` finds no
+line at all and reads no verdict.
 
 `spec` and `plan` are on that list because they are `DOC_TYPE` values, and
 `DOC_TYPE` reaches the output twice — the `(spec)` on the report's header line
@@ -164,6 +170,12 @@ Stage 3 candidate however it matched. Stage 1, and a Stage 2 candidate that
 matched `*/specs/*` or `*/plans/*`, sit in a directory the conventions name;
 everything else is a guess, and a guess is confirmed before it is reviewed.
 
+`find` prints paths, not the pattern each one matched, and `*plan*` matches
+everything `*/plans/*` does — so the output alone cannot tell a named directory
+from a guess. Re-test each returned path yourself for a `specs/` or `plans/`
+component, the same component test the *Document type* table uses; a path that
+has neither matched only `*design*` or `*plan*` and is a guess.
+
 The distinction is not cosmetic, and it is why the rule covers Stage 2 rather
 than Stage 3 alone: a hand-written `docs/architecture-design.md` is a Stage 2 hit
 on `*design*` and then self-types to `spec` on its filename, so a rule that
@@ -230,8 +242,10 @@ header line. Resolve the companion spec in this order:
    When the staged search above ran, re-use what it turned up. When `<path>`
    was given it did **not** run — and an explicit path is the recommended
    unattended form, so that is the common route, not the rare one — so run
-   Stage 2's and Stage 3's `find` yourself and read their `*/specs/*` hits
-   before concluding there is no companion spec. The preference that overrides
+   Stage 3's `find` yourself and read its `*/specs/*` hits before concluding
+   there is no companion spec. Stage 3 alone: it is rooted at `.` and Stage 2
+   at `docs/`, so it already returns everything Stage 2 would, and running both
+   walks the repository twice for one set of hits. The preference that overrides
    the default spec location overrides it for this lookup too; stopping at step
    2 reports "no companion spec" for every repository that relocated its specs,
    and Section 4 turns that into a `Major` the document can never clear
@@ -514,8 +528,10 @@ string is stable enough for a hook or CI job to read later. That is also why
 
 `READY` is a substring of `NOT READY`, so a reader that greps for the bare word
 matches both and reads every failure as a pass. Emit the verdict on its own
-line, in the fixed form `Verdict: <emoji> <READY|NOT READY>`, and tell any
-caller to test for `NOT READY` first — or to match the whole token — rather
+line, opening with the fixed prefix `Verdict: <emoji> <READY|NOT READY>`. What
+is fixed is the *prefix*: Section 5's template appends the severity counts to
+the same line, so a caller must match the prefix and not the whole line. Tell
+any caller to test for `NOT READY` first — or to match the whole token — rather
 than for `READY` alone.
 
 ### What to carry forward
@@ -561,17 +577,17 @@ J Acceptance     ⚠️ Major 1
 
 [Findings]
 
-[Blocker] §3.2 Completeness
+[Blocker] §3.2 A Completeness
   The state storage mechanism is still TBD
   → an implementer cannot tell what to build
   Disposition: Ask (a design decision is required)
 
-[Major] §whole Blind Spots
+[Major] §whole D Blind Spots
   No test strategy section
   → verification method sends the work back to design after implementation
   Disposition: Fix now (write the standard section)
 
-[Minor] §6.3 Consistency
+[Minor] §6.3 B Consistency
   "job" and "task" are used interchangeably
   → no effect on implementation
   Disposition: Fix now (unify terminology)
@@ -714,6 +730,16 @@ why it has no "Match the repository" line.
 Fill the remaining slots with concrete alternatives. Give every choice a
 one-line consequence.
 
+Section 4's two degradation findings are the one case where the alternative is
+not an edit to this document, and the two-choice minimum would otherwise have
+nothing to meet it with. `FORMAT_OK` takes **Restructure the document into the
+superpowers shape** — a real edit, which clears it. A plan with no companion
+spec takes **Write the companion spec first and re-run**, which changes nothing
+here: record it as a decline, not as a change, so the finding stays unresolved
+and Section 8 does not report it as an applied change that did not take. That is
+the whole of Section 4's "do not invent a way to clear it" — the choice may be
+offered, but taking it does not clear the finding in this run.
+
 ```
 Q1 [§3.2] The state storage mechanism is TBD
 
@@ -851,6 +877,14 @@ up both a new `Ask` and a new `Fix now`, that is still a single pass, not two:
 Section 6's *Ask before Fix now* order holds, so go to Section 6 and then fall
 through to Section 7 with the new `Fix now` items in the same batch.
 
+"New" means on this axis what it means on the `Ask` axis: one this run has not
+already applied. A `Fix now` this run *did* apply and the re-review still
+detects is **not** new — the edit did not land what it was for. Do not send it
+round again to be re-applied blind; report it in the completion output exactly
+as a re-detected answered `Ask` is reported, as an applied change that did not
+take. Either way it keeps its severity and its place in the counts, so a
+`Blocker` whose fix did not land still holds the document at `NOT READY`.
+
 Section 4 promises that
 every `Fix now` is applied automatically under `--fix`; routing only
 `Blocker`/`Major`/`Ask` back would break that promise for a `Minor` `Fix now`
@@ -923,6 +957,12 @@ formula in Section 4. Report whatever the formula gives, list the unapplied
 `Fix now` items beside it, and when that verdict is `READY` say in one line
 that it was reached with fixes still unapplied — including above the *Handing
 off to implementation* block, which a `READY` plan reaches on this path too.
+
+### What to carry forward
+
+| Value | Content |
+|-------|---------|
+| `PASS_COUNT` | This arrival's pass number. Carried the way Section 1 says to carry everything, and printed as `pass n/<cap>` on every arrival so it survives in the transcript — it is the only carried value with no anchor on disk or in the user's answers |
 
 ### Completion output
 
