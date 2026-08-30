@@ -239,9 +239,14 @@ header line. Resolve the companion spec in this order:
 1. The path named on the plan's `Spec:` line
 2. A spec file with the same date and topic in `docs/superpowers/specs/`
 3. The same, in whatever directory this repository actually keeps its specs.
-   When the staged search above ran, re-use what it turned up. When `<path>`
-   was given it did **not** run — and an explicit path is the recommended
-   unattended form, so that is the common route, not the rare one — so run
+   Re-use what the staged search turned up **only when it reached Stage 3**.
+   Stage 1 looks no further than `docs/superpowers/` and Stage 2 no further
+   than `docs/`, so a search that stopped at either never looked where a
+   relocated spec lives, and re-using its hits reports "no companion spec" for
+   exactly the repository this step exists to cover. When `<path>` was given
+   the search did **not** run at all — and an explicit path is the recommended
+   unattended form, so that is the common route, not the rare one. In every
+   case but a search that already reached Stage 3, run
    Stage 3's `find` yourself and read its `*/specs/*` hits before concluding
    there is no companion spec. Stage 3 alone: it is rooted at `.` and Stage 2
    at `docs/`, so it already returns everything Stage 2 would, and running both
@@ -534,6 +539,13 @@ the same line, so a caller must match the prefix and not the whole line. Tell
 any caller to test for `NOT READY` first — or to match the whole token — rather
 than for `READY` alone.
 
+A report-only run emits exactly **one** `Verdict:` line, which is the other
+half of why it is the mode to gate on. A `--fix` run emits one per pass —
+Section 8 re-emits Section 5's report on every re-review — plus the one in its
+completion output, so the run's verdict is the **last** `^Verdict:` line, never
+the first. A caller that reads the first match on a `--fix` run reads the
+verdict from before any fix was applied.
+
 ### What to carry forward
 
 Sections 5 to 8 consume these — Section 6 takes `ASK_ITEMS`, Section 7 takes
@@ -800,7 +812,12 @@ Rules:
   The finding stays open.
 - A `Reject` produces no edit.
 - Preserve the document's existing heading structure and style. Do not reformat
-  sections you are not changing.
+  sections you are not changing. The one exception is an `Ask` answered
+  **Restructure the document into the superpowers shape** — Section 6's choice
+  for the `FORMAT_OK` degradation. That answer *is* a request to change the
+  heading structure, and it is the only choice that can clear that finding, so
+  apply it. Refusing it here would pin the document's `Blocker` at unresolved
+  no matter what the user answered.
 - If any edit in the batch fails, **stop and report**: name the edits that
   landed and the ones that did not, so the user can finish or revert by hand.
   Never continue to Section 8 on top of a partial write.
@@ -913,7 +930,12 @@ you print. Do not read the highest `n` as the count itself: it is the
 already stands and lets the loop run past the cap forever. Read only those
 lines, not the *Re-review after fixes* headers — that header belongs to
 *Completion output* below and is emitted once, on the way out, so counting it
-would read every pass as the first.
+would read every pass as the first. Count only the lines **you** emitted on
+arriving here, never one inside quoted document text: when `FORMAT_OK` is `0` a
+finding quotes the offending line verbatim, and a target that documents this
+command — `review-design.md` is itself a hit on Stage 2's `*design*` net —
+carries `pass n/<cap>` in its own prose. Reading a quoted line as an arrival
+inflates the count and ends the loop early.
 
 **No `pass n/<cap>` line yet means this is the first arrival and the count is
 1** — the highest `n` is 0 and the rule above adds one, so the two rules agree.
@@ -927,8 +949,10 @@ nothing at all.
 ```bash
 # Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or
 # zero-valued setting must fail *closed* — fall back to the default rather than
-# looping unbounded or never looping at all. `finalize.md` applies the same
-# fail-closed rule when it reads its counter back from disk.
+# looping unbounded or never looping at all. `finalize.md` guards the same loop
+# in the opposite direction: there it is the *counter* that comes back
+# unreadable and it is set *to* the cap, which stops the loop. Here it is the
+# *cap* itself, and a stop is not the safe answer — the default is.
 MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
 # `case` rejects the non-numeric values. `:-` above already turned an unset or
 # empty setting into 3, so the `''` pattern is belt and braces, not the thing
@@ -938,6 +962,12 @@ MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
 # at the cap and stop the loop before it ran.
 case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
 [ "$MAX_DESIGN_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_DESIGN_REVIEW_LOOP=3
+# Say so out loud when an explicit override was rejected. Substituting 3 for a
+# `0` the user typed runs three passes where they asked for none, and silence
+# leaves them reading those passes as the variable being ignored outright.
+[ -z "${FORGE_MAX_DESIGN_REVIEW_LOOP:-}" ] \
+  || [ "$FORGE_MAX_DESIGN_REVIEW_LOOP" = "$MAX_DESIGN_REVIEW_LOOP" ] \
+  || echo "⚠️ FORGE_MAX_DESIGN_REVIEW_LOOP=$FORGE_MAX_DESIGN_REVIEW_LOOP is not a positive integer — using $MAX_DESIGN_REVIEW_LOOP" >&2
 echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
 ```
 
@@ -984,6 +1014,10 @@ Applied:
 
 Review the changes with: git diff -- <target file>
 ```
+
+The example continues the abridged report in Section 5, so its `Applied:` list
+is abridged the same way — it shows four of the changes, not all of them, which
+is why four bullets do not account for every count that report carried.
 
 When Section 7 wrote nothing, items 2 and 3 have no subject: emit the verdict,
 say in one line **why** nothing was written, and print no `Applied:` list and

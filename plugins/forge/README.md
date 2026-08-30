@@ -34,7 +34,8 @@ The following commands must be available before use:
 > nothing else in the workflow changes.
 
 > **About `/forge:review-design`:** it needs none of the commands above — it
-> only reads a markdown file, so it runs on a bare Claude Code install. The
+> only reads a markdown file (and, with `--fix`, edits that same file), so it
+> runs on a bare Claude Code install. The
 > `superpowers` plugin is optional and only shapes the two ends of the flow: it
 > produces the spec and plan the review reads, and supplies the
 > `superpowers:subagent-driven-development` / `superpowers:executing-plans`
@@ -135,10 +136,12 @@ export FORGE_LANG=en
 See the **Language preamble & i18n contract** section at the top of [`commands/watch.md`](./commands/watch.md) for the full spec.
 
 > **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji
-> stay shared across all languages, and so do `/forge:review-design`'s
-> machine-readable keys — the `Verdict:` prefix, `READY` / `NOT READY`,
-> `Blocker` / `Major` / `Minor`, `Fix now` / `Ask` / `Reject`, `spec` / `plan`,
-> the ten perspective names, and the `pass n/<cap>` counter line.
+> stay shared across all languages, and so do the triage and verdict labels —
+> `/forge:finalize`'s `Fix now` / `Defer` / `Reject`, and
+> `/forge:review-design`'s machine-readable keys: the `Verdict:` prefix,
+> `READY` / `NOT READY`, `Blocker` / `Major` / `Minor`,
+> `Fix now` / `Ask` / `Reject`, `spec` / `plan`, the ten perspective names, and
+> the `pass n/<cap>` counter line.
 
 ### Requirements
 
@@ -178,7 +181,8 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 > Step 2 をスキップする。いずれの場合もそれ以外の挙動は変わらない。
 
 > **`/forge:review-design` について:** 上記の依存コマンドはいずれも不要で、
-> Markdown ファイルを読むだけなので素の Claude Code でも動作する。
+> Markdown ファイルを読む（`--fix` 時はその同じファイルを書き換える）だけなので
+> 素の Claude Code でも動作する。
 > `superpowers` プラグインは任意で、フローの両端にのみ関わる。レビュー対象の
 > 設計書・実装計画を生成するのは `superpowers` 側であり、`READY` と判定された
 > 実装計画の受け渡し先となる `superpowers:subagent-driven-development` /
@@ -276,7 +280,8 @@ export FORGE_LANG=en
 詳細は [`commands/watch.md`](./commands/watch.md) 冒頭の **Language preamble & i18n contract** セクションを参照。
 
 > **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は
-> 全言語共通で維持されます。`/forge:review-design` の機械可読キー —
+> 全言語共通で維持されます。`/forge:finalize` のトリアージラベル
+> `Fix now` / `Defer` / `Reject`、および `/forge:review-design` の機械可読キー —
 > `Verdict:` プレフィックス、`READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、
 > `Fix now` / `Ask` / `Reject`、`spec` / `plan`、10観点の名称、`pass n/<cap>` の
 > カウンタ行 — も同様に英語のまま出力されます。
@@ -318,7 +323,8 @@ export FORGE_LANG=en
 > 上述任一情况下其余步骤均不变。
 
 > **关于 `/forge:review-design`:** 它不需要上述任何依赖命令——只读取一个
-> Markdown 文件，因此在原生 Claude Code 上即可运行。`superpowers` 插件是可选的，
+> Markdown 文件（使用 `--fix` 时改写同一个文件），因此在原生 Claude Code 上
+> 即可运行。`superpowers` 插件是可选的，
 > 只涉及流程的两端：它生成供本命令评审的设计文档与实现计划，并提供判定为
 > `READY` 的实现计划所交接到的 `superpowers:subagent-driven-development` /
 > `superpowers:executing-plans` 技能。
@@ -413,7 +419,8 @@ export FORGE_LANG=en
 详情请参阅 [`commands/watch.md`](./commands/watch.md) 顶部的 **Language preamble & i18n contract** 章节。
 
 > **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中
-> 保持一致。`/forge:review-design` 的机器可读键——`Verdict:` 前缀、
+> 保持一致。`/forge:finalize` 的分类标签 `Fix now` / `Defer` / `Reject`，以及
+> `/forge:review-design` 的机器可读键——`Verdict:` 前缀、
 > `READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、`Fix now` / `Ask` / `Reject`、
 > `spec` / `plan`、十个观察视角的名称，以及 `pass n/<cap>` 计数行——同样保持英文。
 
