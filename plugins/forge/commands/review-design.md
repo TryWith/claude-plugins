@@ -309,6 +309,12 @@ header line. Resolve the companion spec in this order:
 # `${...}` expand inside them, and a `"` in the path closes the string. A plan
 # committed as `2099-12-31-$(sh payload).md` would otherwise run `sh payload`
 # before `grep` ever started, and the `|| true` below would swallow the error.
+# TARGET_FILE is repository-root-relative, so this block moves there like every
+# other one. Without it a run started from a subdirectory resolves the path
+# against the wrong cwd, `grep` finds nothing, and the plan is recorded as
+# having no `Spec:` line — a `Major` the document can never clear.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+
 IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
 <the plan file>
 FORGE_TARGET_PATH
@@ -814,10 +820,13 @@ Rules for the header block:
   metacharacter — Section 1 treats a second remaining token as a second path
   and stops, so an unquoted `docs/my design/foo.md` prints a hint that is an
   error when the reader runs it. Section 1 groups on single quotes too, so a
-  path containing a `"` takes single quotes instead; one containing both is
-  quotable neither way — print it bare and say the path needs quoting by hand,
-  the same carve-out Section 8's `git diff` pointer makes for its own quoting
-  rule
+  path containing a `"` takes single quotes instead; one containing both takes
+  single quotes with each `'` escaped as `'\''`, which covers every path and
+  leaves no carve-out. Section 8's `git diff` pointer escapes the same way, and
+  there it is load-bearing — that line is pasted into a **shell**, so a path
+  printed bare puts `$(...)` in unquoted context. This hint is typed into
+  Claude, not a shell, so the stake here is only that the hint parses; the two
+  rules keep the same shape so a reader holds one convention, not two
 - **The hint is printed only when `FIX_MODE` is `0` and the report carries at
   least one `Fix now` or `Ask`.** A run that is already applying fixes must not
   tell the reader to pass `--fix`, and neither must a report with nothing for a
@@ -1268,12 +1277,15 @@ if git ls-files --error-unmatch -- "$FORGE_TARGET" >/dev/null 2>&1; then
   # Single-quote the path: this line is a command the reader copies and runs,
   # and the same rule Section 5 puts on the `--fix` hint applies here — an
   # unquoted `docs/my design/foo.md` pastes as two pathspecs and diffs neither.
-  # A path containing a single quote is bound but not quotable this way; print
-  # it unquoted and say the path needs quoting by hand.
-  case "$FORGE_TARGET" in
-    *\'*) printf 'Review the changes with: git diff -- %s   (quote the path — it contains a quote)\n' "$FORGE_TARGET" ;;
-    *)    printf "Review the changes with: git diff -- '%s'\n" "$FORGE_TARGET" ;;
-  esac
+  # Escape each `'` in the path as `'\''` first, so one rule covers every path.
+  # There is no un-quotable path, and printing one bare is not a safe fallback:
+  # a filename may legally contain `'`, `$`, `(` and `)` — only `/` and NUL are
+  # illegal — so a planted `2099-12-31-a'b'$(...)-design.md` printed bare puts
+  # the substitution back in unquoted context and runs it the moment the reader
+  # pastes the line. Telling them to "quote it by hand" does not help either:
+  # double quotes still expand `$(...)`.
+  FORGE_Q=$(printf '%s' "$FORGE_TARGET" | sed "s/'/'\\\\''/g")
+  printf "Review the changes with: git diff -- '%s'\n" "$FORGE_Q"
 else
   printf '%s is not tracked by git — open it to review the changes\n' "$FORGE_TARGET"
 fi
