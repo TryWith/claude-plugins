@@ -19,11 +19,32 @@ jq -e . .claude-plugin/marketplace.json
 jq -e . plugins/<name>/.claude-plugin/plugin.json
 ```
 
-Local end-to-end install before pushing:
+### Loading a change you just made
+
+There is no build step, but there are **three copies** of every command file, and
+editing the first does not update the third:
+
+1. this repository — where you edit
+2. `~/.claude/plugins/marketplaces/trywith/` — a git clone of the GitHub repo
+3. `~/.claude/plugins/cache/trywith/forge/<version>/` — **what Claude Code actually reads**
+
+The cache is keyed on the `version` in `plugin.json`. While that string is
+unchanged, neither syncing the clone nor `/reload-plugins` replaces the cached
+copy — Claude Code keeps serving the build that first populated that version's
+directory. A whole afternoon of "verification" can run against a stale command
+without a single error appearing.
+
+To test an edit end to end, **bump `version` in `plugins/forge/.claude-plugin/plugin.json`**,
+then `/reload-plugins`. Confirm what is actually loaded before trusting a result:
 
 ```bash
-/plugin install ./plugins/forge
+diff plugins/forge/commands/review-design.md \
+     ~/.claude/plugins/cache/trywith/forge/$(jq -r .version plugins/forge/.claude-plugin/plugin.json)/commands/review-design.md
 ```
+
+Note that `/plugin install ./plugins/forge` does **not** work — that command
+takes a marketplace, not a plugin directory, and reports
+`Marketplace "./plugins/forge" not found`.
 
 ## Non-obvious conventions
 
