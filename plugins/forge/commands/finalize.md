@@ -373,6 +373,11 @@ Give **every** unapplied finding exactly one outcome, in writing:
   command. Record it — deferring is not dropping.
 - **Reject** — wrong, or a false positive. One line of reason.
 
+`Fix now`, `Defer` and `Reject` are the keys this triage is read back on: 2-7's
+exit conditions name them by word, and a finding you classified keeps that word
+across every later iteration. They stay English however the finding beside them
+is written.
+
 Default to the reviewer's judgment. Override it to **Fix now** only for the two
 categories named above; "it would read a bit nicer" is a **Defer**. Silently
 agreeing with a skip is not an outcome — each finding gets one of the three.
@@ -733,7 +738,8 @@ Invoke the slash command:
 consecutive all-clear checks; watches CI / open review threads / Changes
 Requested) and, on exit, emits the completion notification (macOS desktop
 notification + final terminal summary). Success and aborted outcomes produce
-different notifications — see `watch.md` Section 3 for details.
+different notifications — see `watch.md`'s **Completion notification** section
+for details.
 
 If Step 2 deferred any findings (2-8), restate the count and the PR comment link
 alongside that summary. `/forge:watch` reports on CI and reviews only; it knows

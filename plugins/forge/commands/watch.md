@@ -46,7 +46,8 @@ STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters befor
 # `finalize.md` Step 2 uses the same convention.
 #
 # These three paths are re-derived, not carried over, by any later block that
-# needs them (Section 3 and Cleanup) — see the re-derive preamble there.
+# needs them (Completion notification and Cleanup) — see the re-derive preamble
+# there.
 #   - STREAK_FILE:   per-check pending streak, one "<count>\t<check name>" line each
 #   - NOTIFIED_FILE: space-joined set of awaiting-human check names last notified,
 #                    so a long approval wait doesn't re-notify every 5 minutes
@@ -57,9 +58,9 @@ NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMB
 : > "$STREAK_FILE"
 : > "$NOTIFIED_FILE"
 
-# Result marker consumed by Section 3 (notification). Default to "aborted" so
-# any abnormal exit (cap hit, error, killed) produces an honest notification
-# rather than a false "Ready to merge".
+# Result marker consumed by the Completion notification section. Default to
+# "aborted" so any abnormal exit (cap hit, error, killed) produces an honest
+# notification rather than a false "Ready to merge".
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
@@ -262,7 +263,7 @@ CONSECUTIVE_CLEAR=$((CONSECUTIVE_CLEAR + 1))
 echo "✅ Clear $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
 
 if [ "$CONSECUTIVE_CLEAR" -ge 2 ]; then
-  echo "success" > "$WATCH_RESULT_FILE"   # consumed by Section 3 below
+  echo "success" > "$WATCH_RESULT_FILE"   # consumed by Completion notification
   break                                    # mirror Phase 1's cap-check break
 fi
 ```
@@ -758,8 +759,9 @@ BLOCKED_NOW=$(printf '%s\n%s\n' "$BLOCKED_NOW_API" "$BLOCKED_NOW_CHECKS" \
 ### Cleanup
 
 ```bash
-# Same re-derive as Section 3 — an unset path would make every `rm -f` a no-op
-# and leave stale streak counts for the next run on this PR to read.
+# Same re-derive as Completion notification — an unset path would make every
+# `rm -f` a no-op and leave stale streak counts for the next run on this PR to
+# read.
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 
