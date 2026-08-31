@@ -42,20 +42,10 @@ still need one question about its type.
 
 ### Language
 
-Resolve the user's preferred output language and use it consistently for the
-rest of the command. See the **Language preamble & i18n contract** section of
-`watch.md` for the full priority rules (env var → Claude conversation language
-→ user message language → `ja` default), translation scope, and override
-options.
-
-```bash
-LANG_CODE="${FORGE_LANG:-ja}"
-echo "🌐 Language: $LANG_CODE"
-```
-
-All user-facing prose (findings, reasons, choice labels, progress messages)
-is translated to `$LANG_CODE` at runtime. The following stay in English and
-are **never** translated — they are machine-readable keys, not prose:
+Write to the user in the language of the conversation — findings, reasons,
+choice labels, progress messages. The English strings in this file are source
+templates, not literal output. `watch.md`'s **Output language** section is the
+canonical list of what stays English; the keys this command emits are:
 
 `Verdict:` `READY` `NOT READY` `Blocker` `Major` `Minor` `Fix now` `Ask`
 `Reject` `spec` `plan`
@@ -434,8 +424,8 @@ Every finding carries four fields. Do not collapse them:
 |-------|---------|
 | location | `§3.2` for a finding about specific text. `§whole` for a finding about something the document does not contain at all — including when `FORMAT_OK` is `0`, since an absent thing has no line to quote. When `FORMAT_OK` is `0` and the finding *is* about specific text, quote the offending line instead of citing a section, because the section numbers it would cite do not exist |
 | perspective | The letter and English name, e.g. `A Completeness` |
-| finding | What is wrong — translated to `$LANG_CODE` |
-| consequence | What happens if it is implemented as written — translated to `$LANG_CODE` |
+| finding | What is wrong — translated to the conversation's language |
+| consequence | What happens if it is implemented as written — translated to the conversation's language |
 
 The consequence field is not decoration: Section 4 assigns severity from it.
 
@@ -592,7 +582,7 @@ puts them on a card of their own before the walk starts.
 
 ## Section 5: Report
 
-Emit the report in `$LANG_CODE`, keeping every label listed in Section 1 in
+Emit the report in the conversation's language, keeping every label listed in Section 1 in
 English.
 
 ### Structure

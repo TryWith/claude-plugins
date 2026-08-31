@@ -15,101 +15,47 @@ running `/forge:finalize` instead.
 
 ---
 
-## Section 1: Language preamble & i18n contract
+## Section 1: Output language
 
-This section serves a dual purpose:
+Write to the user in the language of the conversation. That is Claude's default
+behaviour, so there is nothing to resolve and no preamble to run — this section
+exists for the one thing that is **not** default: the words that must stay in
+English no matter what language the rest of the output is in.
 
-1. **Runtime preamble** — the shell snippet Claude runs at the start of every
-   Forge command to resolve `$LANG_CODE`.
-2. **i18n contract** — the canonical specification for what gets translated,
-   how language is resolved, what stays in source form, and how to override.
+The English strings throughout every forge command file are **source
+templates**, not literal output. Translate them. The exceptions are below.
 
-### Runtime preamble
+### Never translated
 
-Resolve the user's preferred output language and use it consistently for the
-rest of the command.
+These are machine-readable keys, not prose. A translated key breaks something
+concrete — a `grep` in a hook, a Conventional Commits parser, a literal this
+plugin reads back out of its own output.
 
-```bash
-LANG_CODE="${FORGE_LANG:-ja}"
-echo "🌐 Language: $LANG_CODE"
-```
+| Item | Why it must stay English |
+|------|--------------------------|
+| Conventional Commits prefixes | `fix:`, `feat:` — parsed by tooling and by convention |
+| Emoji | 🔭 ✅ ⚠️ 🎉 ⏳ ❌ 🔔 🛰 — language-neutral already |
+| File and command names | `/forge:finalize`, `watch.md` — proper nouns |
+| Placeholders in templates | `{pr_number}`, `{repo}` — substituted, not read |
+| Marker strings | `<!-- forge:deferred-findings -->` — `finalize.md` finds its own PR comment by matching this byte-for-byte |
+| Verdict prefix and labels | `Verdict:`, `READY`, `NOT READY` — a CI gate greps for these |
+| Severity labels | `Blocker`, `Major`, `Minor` — the verdict formula is stated in terms of them |
+| Disposition labels | `Fix now`, `Ask`, `Reject` (`/forge:review-design`); `Fix now`, `Defer`, `Reject` (`/forge:finalize`) |
+| Document type keys | `spec`, `plan` — emitted on report headers and in `— not applicable (<type>)` rows |
+| Perspective names | `Completeness`, `Consistency`, `Repo Grounding`, `Blind Spots`, `Buildability`, `Scope`, `Assumptions`, `Alternatives`, `YAGNI`, `Acceptance` — names in English, descriptions translated |
+| Loop-counter lines | `pass n/<cap>` — `/forge:review-design` reads its own pass count back by matching this literal |
 
-All subsequent user-facing output (logs, notifications, commit message bodies,
-review replies, progress reports) must be translated to `$LANG_CODE` at
-runtime. The English strings throughout this file are source templates, not
-literal output.
+**Labels only.** These stay English where they are *labels* — a report row, a
+`Disposition:` line, a triage heading. The same word running inside a sentence
+is prose: `/forge:finalize`'s "Fix now, defer to a follow-up, or accept the
+risk?" reads naturally in the conversation's language.
 
-### Language resolution
+### Adding to this list
 
-The shell snippet above only handles the env var and the `ja` default
-mechanically. Steps 2 and 3 below are Claude's runtime decisions (LLM
-behavior), not encoded in shell. Priority order (highest first):
-
-1. The `FORGE_LANG` environment variable (e.g. `ja`, `en`, `zh-CN`, `ko`,
-   `fr`, `de` — BCP 47 form)
-2. Claude Code's conversation language setting (CLAUDE.md / settings Language
-   directive, etc.)
-3. The language of the user's most recent message
-4. Default: `ja` (Japanese)
-
-### Translation scope
-
-| Item | Translate? | Example |
-|------|-----------|---------|
-| Shell `echo` messages | ✅ | "Watching started" → "監視開始" |
-| `osascript` notification title and body | ✅ | "All checks passed!" → "全チェッククリア!" |
-| Final summary report labels | ✅ | "CI checks" → "CI チェック" |
-| Commit message **body** | ✅ | "address self-review findings" → "自己レビュー指摘事項の修正" |
-| Replies to review comments | ✅ | "Addressed." → "対応しました。" |
-| Progress updates to the user | ✅ | All of Claude's natural-language replies |
-| Conventional Commits prefix | ❌ | `fix:`, `feat:` stay in English |
-| Emoji | ❌ | All emoji are language-neutral and shared across every language |
-| File and command names | ❌ | `/forge:finalize` etc. are proper nouns |
-| Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
-| Verdict, severity and disposition labels | ❌ | `Verdict:`, `READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject` — machine-readable keys: verdict prefix, verdict and severity from `/forge:review-design`, dispositions shared by `/forge:review-design` (`Fix now` / `Ask` / `Reject`) and `/forge:finalize` (`Fix now` / `Defer` / `Reject`). **Untranslated as labels only** — on a report row, a `Disposition:` line, a triage heading. The same word running inside a sentence is prose and is translated, so `/forge:finalize`'s "Fix now, defer to a follow-up, or accept the risk?" still reads naturally in `$LANG_CODE` |
-| Document type keys | ❌ | `spec`, `plan` — `/forge:review-design` emits them on its report header line and in its `— not applicable (<type>)` rows |
-| Perspective names | ❌ | `Completeness`, `Consistency`, `Repo Grounding`, `Blind Spots`, `Buildability`, `Scope`, `Assumptions`, `Alternatives`, `YAGNI`, `Acceptance` — `/forge:review-design` emits the names in English and translates only their descriptions |
-| Loop-counter lines | ❌ | `pass n/<cap>` — `/forge:review-design` reads its own pass count back out of the transcript by matching this literal, so a translated line is unreadable to it |
-
-### Translation policy
-
-- The English strings inside each command file are **source templates**, not
-  literal output.
-- Claude generates the natural-language translation for `$LANG_CODE` at
-  runtime.
-- Within a single session, do **not** mix languages — stick with the language
-  resolved at start.
-- If a non-supported language is requested, fall back to `en`.
-
-### Supported languages
-
-Officially verified:
-
-- `ja` — Japanese (default)
-- `en` — English (source language)
-
-Other languages (e.g. `zh-CN`, `ko`, `fr`, `de`) work whenever Claude can
-translate to them, but naturalness is not guaranteed.
-
-### How to check or override
-
-```bash
-# Inspect current setting
-echo "FORGE_LANG: ${FORGE_LANG:-(unset)}"
-
-# Force a language for a single invocation
-FORGE_LANG=en /forge:finalize
-
-# Persist for the shell session
-export FORGE_LANG=en
-/forge:finalize
-```
-
-### Future extension: static message catalog
-
-The current design relies on Claude's runtime translation. If output
-consistency or QA becomes a concern, a static catalog
-(e.g. `commands/messages/{lang}.json`) can be introduced later.
+This table is the canonical list for every forge command. A command that emits
+a new machine-readable key adds a row **here**, and mirrors the category in
+`CLAUDE.md`'s i18n bullet. A key declared only inside one command file is a key
+the next command author will translate.
 
 ---
 
@@ -161,7 +107,7 @@ NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMB
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
-# These echoes must be translated to $LANG_CODE before being emitted
+# These echoes must be translated to the conversation's language before being emitted
 echo "🔭 Watching started: PR #$PR_NUMBER ($REPO) on branch $BRANCH"
 echo "📋 Interval: 5 min / Exit: 2 consecutive clears / Cap: $MAX_WATCH_ITER iterations"
 ```
@@ -398,7 +344,7 @@ if [ -n "$BLOCKED_NAMES" ] && [ "$BLOCKED_NAMES" != "$PREV_NOTIFIED" ]; then
 fi
 ```
 
-(Translate the `echo` lines and the notification title/body to `$LANG_CODE`;
+(Translate the `echo` lines and the notification title/body to the conversation's language;
 keep emoji, check names, and URLs as-is.) Then **return to Phase 1** — keep
 watching so the loop converges the moment the gate is cleared.
 
@@ -452,7 +398,7 @@ done <<< "$PENDING_NOW"
 printf '%s' "$NEW_STREAK" > "$STREAK_FILE"   # checks absent this pass drop out → streak reset
 ```
 
-(Translate the `echo` / notification strings to `$LANG_CODE`; keep emoji and
+(Translate the `echo` / notification strings to the conversation's language; keep emoji and
 check names as-is.) Then **return to Phase 1**.
 
 ##### ❌ Problems found
@@ -566,7 +512,7 @@ git commit -m "fix: CI failure — <concrete fix>"
 git push
 ```
 
-(Subject prefix `fix:` stays English; translate only the body to `$LANG_CODE`.)
+(Subject prefix `fix:` stays English; translate only the body to the conversation's language.)
 
 ###### Review comment response
 
@@ -619,7 +565,7 @@ gh api graphql -f query='
   }' -F id="$THREAD_ID"
 ```
 
-(All reply bodies must be translated to `$LANG_CODE`; the mutations are
+(All reply bodies must be translated to the conversation's language; the mutations are
 language-neutral. Commit subject prefixes stay English.)
 
 ###### Changes Requested response
@@ -764,11 +710,11 @@ PR_URL=$(gh pr view --json url --jq '.url')
 
 ### Desktop notification (macOS)
 
-Branch on `$WATCH_RESULT`. Translate the title and body to `$LANG_CODE`.
+Branch on `$WATCH_RESULT`. Translate the title and body to the conversation's language.
 
 ```bash
 if [ "$WATCH_RESULT" = "success" ]; then
-  # Example ($LANG_CODE=en)
+  # Example (shown here in English)
   osascript -e "display notification \"All CI checks and reviews passed! Ready to merge 🎉\" \
     with title \"Forge — PR #$PR_NUMBER complete\" \
     sound name \"Glass\""
@@ -782,7 +728,7 @@ fi
 
 ### Final terminal report
 
-Two shapes, one per outcome. Translate all labels to `$LANG_CODE`; keep emoji as-is.
+Two shapes, one per outcome. Translate all labels to the conversation's language; keep emoji as-is.
 For the aborted shape, fill the State column by re-running the Phase 2 queries
 above so the report reflects the current actual state.
 

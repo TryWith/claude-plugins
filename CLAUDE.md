@@ -31,15 +31,14 @@ Local end-to-end install before pushing:
 
 `finalize.md`, `watch.md`, etc. are read **by Claude as instructions**. The shell snippets inside (`gh ...`, `git ...`) are templates Claude executes and may adapt — substituting variables, translating strings, etc. They are not raw bash scripts.
 
-### i18n: English source, runtime translation
+### i18n: English source, conversation-language output
 
-All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` per the **Language preamble & i18n contract** section at the top of `plugins/forge/commands/watch.md` (priority: `FORGE_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it. `finalize.md` Step 0 inlines the short preamble snippet but defers to `watch.md` for the full contract.
+All command files are written in English as the **source language**. At execution time Claude writes to the user in the language of the conversation — that is its default behaviour, so there is no resolution step and no env var. The one thing that is not default is the set of strings that must stay English; `plugins/forge/commands/watch.md`'s **Output language** section is the canonical list.
 
 When editing command files:
 - Keep prose and template strings in English
 - Do **not** hard-code Japanese / other-language strings into command files — they belong only in the trilingual README
-- **Not translated** (intentionally): Conventional Commits prefixes (`fix:`, `feat:`); status emoji (🔭 ✅ ⚠️ 🎉 ⏳ ❌); the `Verdict:` prefix and the verdict, severity and disposition labels (`READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject`) — as labels, not where the same word runs inside a sentence; document-type keys (`spec`, `plan`); perspective names (`Completeness`, `Consistency`, …); and loop-counter lines (`pass n/<cap>`). These are shared across all languages. `watch.md`'s translation-scope table is the canonical list — extend it there and mirror the category here.
-- Default user-facing output is Japanese (`ja`), since the primary audience is internal TryWith users.
+- **Not translated** (intentionally), because something reads them mechanically: Conventional Commits prefixes (`fix:`, `feat:`); status emoji (🔭 ✅ ⚠️ 🎉 ⏳ ❌); command and file names; marker strings such as `<!-- forge:deferred-findings -->`; the `Verdict:` prefix and the verdict, severity and disposition labels (`READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject`) — as labels, not where the same word runs inside a sentence; document-type keys (`spec`, `plan`); perspective names (`Completeness`, `Consistency`, …); and loop-counter lines (`pass n/<cap>`). **Extend `watch.md`'s table first, then mirror the category here** — a key declared only inside one command file is a key the next author will translate.
 
 ### Two-level command composition
 

@@ -6,22 +6,17 @@ description: Run the full post-implementation workflow — commit, push, PR, cod
 
 Run the full post-implementation workflow. Do **not** advance to the next step until the current one fully completes.
 
-## Step 0: Determine output language
+## Step 0: Output language
 
-Resolve the user's preferred output language and use it consistently for the
-rest of the command. See the **Language preamble & i18n contract** section of
-`watch.md` for the full priority rules (env var → Claude conversation language
-→ user message language → `ja` default), translation scope, and override
-options.
+Write to the user in the language of the conversation — logs, notifications,
+commit message bodies, review replies, progress reports. The English strings
+below are source templates, not literal output.
 
-```bash
-LANG_CODE="${FORGE_LANG:-ja}"
-echo "🌐 Language: $LANG_CODE"
-```
-
-All subsequent user-facing output (logs, notifications, commit message bodies,
-review replies, progress reports) must be translated to `$LANG_CODE` at
-runtime.
+The exceptions are the machine-readable keys listed in `watch.md`'s
+**Output language** section, which is the canonical list for every forge
+command. The ones this command emits: Conventional Commits prefixes (`fix:`),
+emoji, command names, the `<!-- forge:deferred-findings -->` marker, and the
+triage labels `Fix now` / `Defer` / `Reject`.
 
 ## Step 0.5: Pre-flight — verify required dependencies
 
@@ -62,7 +57,7 @@ missing with the install hints from the table above, then abort:
 Install/enable the missing items, run /reload-plugins, then re-invoke /forge:finalize.
 ```
 
-(Translate the message above to `$LANG_CODE`; keep the slash command names
+(Translate the message above to the conversation's language; keep the slash command names
 and install hints as-is — they are proper nouns.)
 
 A missing `/security-review` does **not** block startup — it is invoked only
@@ -250,7 +245,7 @@ Branch on what comes back:
   🔭 Step 2: code review running automatically — PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>
   ```
 
-  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+  (Translate to the conversation's language; keep the command name and emoji as-is.)
 
 - **Model invocation is declined** — the tool result refuses on
   invocation-policy grounds (e.g. a `disable-model-invocation` rejection) and
@@ -272,7 +267,7 @@ Branch on what comes back:
   ⚠️ Step 2 skipped — /code-review is not available in this session (not found or disabled).
   ```
 
-  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+  (Translate to the conversation's language; keep the command name and emoji as-is.)
 
 - **Anything else goes wrong** — a transient tool error, a launch failure →
   fall back to the manual prompt for *this* iteration only. Do **not** set
@@ -290,7 +285,7 @@ I'll pick the workflow back up automatically once it finishes.
 (PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>)
 ```
 
-(Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+(Translate to the conversation's language; keep the command name and emoji as-is.)
 
 **Waiting for completion.** `/code-review --fix` usually runs as a **background
 subagent** that hands control back to the conversation before it has finished.
@@ -483,7 +478,7 @@ staged change with `git diff --cached` (i.e. after staging, before
 commit body distinguishes the review's fixes from your triage. Never invent a
 summary.
 
-> Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
+> Note: the commit subject prefix (`fix:` etc.) stays in English regardless of the conversation's language — Conventional Commits is language-neutral. Translate only the body.
 
 ### 2-6. Re-review
 
@@ -555,7 +550,7 @@ PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
 # The marker is a machine key, NOT a user-facing string: it must stay byte-for-
 # byte identical across runs and languages or the next run cannot find this
 # comment and posts a duplicate. Never translate it. The heading on the next
-# line *is* user-facing — translate it to $LANG_CODE, emoji unchanged.
+# line *is* user-facing — translate it to the conversation's language, emoji unchanged.
 MARKER='<!-- forge:deferred-findings -->'
 BODY="$MARKER"$'\n'"### ⏳ Deferred code-review findings"$'\n\n'"$(
   while IFS=$'\t' read -r loc summary; do
@@ -585,14 +580,14 @@ esac
 echo "$COMMENT_URL"   # Step 4 restates this link — keep it
 ```
 
-Also tell the user directly, in `$LANG_CODE` — a comment they have to go looking
+Also tell the user directly, in the conversation's language — a comment they have to go looking
 for is not a report:
 
 ```
 ⏳ Step 2 deferred <N> finding(s) — posted to PR #<PR_NUMBER> for review.
 ```
 
-(Translate to `$LANG_CODE`; keep the emoji and the PR reference as-is.)
+(Translate to the conversation's language; keep the emoji and the PR reference as-is.)
 
 Carry the count **and the `$COMMENT_URL` the block printed** forward yourself —
 like `REVIEW_MODE`, they are values you hold in the conversation, not files (2-9
@@ -668,7 +663,7 @@ explicitly, and proceed to Step 4:
 🔒 Security review skipped — the diff touches no security-relevant surface (<one-line reason>).
 ```
 
-(Translate the message to `$LANG_CODE`; keep the emoji and command names as-is.)
+(Translate the message to the conversation's language; keep the emoji and command names as-is.)
 
 ### 3-2. Run the security review
 
@@ -716,7 +711,7 @@ MAX_SEC_LOOP=5
 # At the start of each security iteration: SEC_LOOP=$((SEC_LOOP + 1)) and check the cap
 ```
 
-(Subject prefix `fix:` stays English; translate only the body to `$LANG_CODE`.)
+(Subject prefix `fix:` stays English; translate only the body to the conversation's language.)
 
 #### Medium / Low → defer to human
 
@@ -733,7 +728,7 @@ Fix now, defer to a follow-up, or accept the risk?
 (Any Critical/High findings were already auto-fixed above.)
 ```
 
-(Translate to `$LANG_CODE`; keep emoji, severity labels, file paths, and command
+(Translate to the conversation's language; keep emoji, severity labels, file paths, and command
 names as-is.) Ask the user how to proceed and act on their answer. Once
 Critical / High are cleared and Medium / Low have been surfaced (and handled per
 the user's choice), proceed to **Step 4**.

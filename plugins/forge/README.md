@@ -104,44 +104,24 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  implementation
 ```
 
-### Multilingual output
+### Output language
 
-Output messages, notifications, commit message bodies, and review replies are translated to the user's preferred language.
+Messages, notifications, commit message bodies and review replies come back in
+the language of your conversation. Nothing to configure — talk to Claude in
+Japanese and the output is Japanese; in English and it is English.
 
-#### Language resolution order
-
-1. `FORGE_LANG` env var (e.g. `ja`, `en`, `zh-CN`, `ko`)
-2. Claude Code conversation language setting
-3. Default: `ja` (Japanese)
-
-#### Usage
-
-```bash
-# Run once in English
-FORGE_LANG=en /forge:finalize
-
-# Set for the whole shell
-export FORGE_LANG=en
-/forge:finalize
-```
-
-#### Verified languages
-
-| Code | Language | Status |
-|------|----------|--------|
-| `ja` | Japanese | ✅ Default |
-| `en` | English | ✅ Source language |
-| Others (BCP 47) | — | Works if Claude can translate; naturalness not guaranteed |
-
-See the **Language preamble & i18n contract** section at the top of [`commands/watch.md`](./commands/watch.md) for the full spec.
-
-> **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji
-> stay shared across all languages, and so do the triage and verdict labels —
-> `/forge:finalize`'s `Fix now` / `Defer` / `Reject`, and
-> `/forge:review-design`'s machine-readable keys: the `Verdict:` prefix,
-> `READY` / `NOT READY`, `Blocker` / `Major` / `Minor`,
-> `Fix now` / `Ask` / `Reject`, `spec` / `plan`, the ten perspective names, and
-> the `pass n/<cap>` counter line.
+> **Not translated:** a handful of strings stay English in every language,
+> because something reads them mechanically. Conventional Commits prefixes
+> (`fix:` etc.), all emoji, command and file names, the
+> `<!-- forge:deferred-findings -->` PR-comment marker, `/forge:finalize`'s
+> triage labels `Fix now` / `Defer` / `Reject`, and `/forge:review-design`'s
+> keys: the `Verdict:` prefix, `READY` / `NOT READY`,
+> `Blocker` / `Major` / `Minor`, `Fix now` / `Ask` / `Reject`, `spec` / `plan`,
+> the ten perspective names, and the `pass n/<cap>` counter line. A CI gate
+> greps for `Verdict:` and `NOT READY`; translating them would break it.
+>
+> The canonical list lives in the **Output language** section of
+> [`commands/watch.md`](./commands/watch.md).
 
 ### Requirements
 
@@ -248,43 +228,22 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  実装
 ```
 
-### 多言語出力
+### 出力言語
 
-出力メッセージ・通知・コミットメッセージ本文・レビューリプライは、ユーザーの言語設定に応じて翻訳されます。
+メッセージ・通知・コミットメッセージ本文・レビューリプライは、**会話している
+言語で返ります。**設定は不要です。日本語で話しかければ日本語、英語なら英語です。
 
-#### 言語決定の優先順位
-
-1. 環境変数 `FORGE_LANG`（例: `ja`, `en`, `zh-CN`, `ko`）
-2. Claude Code の会話言語設定
-3. デフォルト: `ja`（日本語）
-
-#### 使い方
-
-```bash
-# 一時的に英語で実行
-FORGE_LANG=en /forge:finalize
-
-# シェル全体で英語に
-export FORGE_LANG=en
-/forge:finalize
-```
-
-#### 検証済み言語
-
-| コード | 言語 | 状態 |
-|--------|------|------|
-| `ja` | 日本語 | ✅ デフォルト |
-| `en` | English | ✅ ソース言語 |
-| その他 (BCP 47) | — | Claude が翻訳可能なら対応（自然さは保証されない） |
-
-詳細は [`commands/watch.md`](./commands/watch.md) 冒頭の **Language preamble & i18n contract** セクションを参照。
-
-> **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は
-> 全言語共通で維持されます。`/forge:finalize` のトリアージラベル
-> `Fix now` / `Defer` / `Reject`、および `/forge:review-design` の機械可読キー —
-> `Verdict:` プレフィックス、`READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、
-> `Fix now` / `Ask` / `Reject`、`spec` / `plan`、10観点の名称、`pass n/<cap>` の
-> カウンタ行 — も同様に英語のまま出力されます。
+> **翻訳されないもの:** 機械が読む文字列は、どの言語でも英語のままです。
+> Conventional Commits の接頭辞（`fix:` など）、すべての絵文字、コマンド名と
+> ファイル名、PR コメントのマーカー `<!-- forge:deferred-findings -->`、
+> `/forge:finalize` のトリアージラベル `Fix now` / `Defer` / `Reject`、
+> `/forge:review-design` のキー（`Verdict:` 接頭辞、`READY` / `NOT READY`、
+> `Blocker` / `Major` / `Minor`、`Fix now` / `Ask` / `Reject`、`spec` / `plan`、
+> 10 観点の名前、`pass n/<cap>` のカウンタ行）。CI のゲートは `Verdict:` や
+> `NOT READY` を grep するため、翻訳すると壊れます。
+>
+> 正典のリストは [`commands/watch.md`](./commands/watch.md) の
+> **Output language** 節にあります。
 
 ### 前提条件
 
@@ -387,42 +346,21 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  实现
 ```
 
-### 多语言输出
+### 输出语言
 
-输出消息、通知、提交消息正文、评审回复将根据用户的语言设置进行翻译。
+消息、通知、提交消息正文、评审回复都会以**你对话所用的语言**返回。无需配置：
+用日语交流就输出日语，用英语就输出英语。
 
-#### 语言决定优先级
-
-1. 环境变量 `FORGE_LANG`（例：`ja`, `en`, `zh-CN`, `ko`）
-2. Claude Code 会话语言设置
-3. 默认：`ja`（日语）
-
-#### 使用示例
-
-```bash
-# 临时以英语运行
-FORGE_LANG=en /forge:finalize
-
-# 整个 shell 切换为英语
-export FORGE_LANG=en
-/forge:finalize
-```
-
-#### 已验证语言
-
-| 代码 | 语言 | 状态 |
-|------|------|------|
-| `ja` | 日语 | ✅ 默认 |
-| `en` | 英语 | ✅ 源语言 |
-| 其他 (BCP 47) | — | 若 Claude 可翻译则支持（不保证自然度） |
-
-详情请参阅 [`commands/watch.md`](./commands/watch.md) 顶部的 **Language preamble & i18n contract** 章节。
-
-> **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中
-> 保持一致。`/forge:finalize` 的分类标签 `Fix now` / `Defer` / `Reject`，以及
-> `/forge:review-design` 的机器可读键——`Verdict:` 前缀、
-> `READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、`Fix now` / `Ask` / `Reject`、
-> `spec` / `plan`、十个观察视角的名称，以及 `pass n/<cap>` 计数行——同样保持英文。
+> **不翻译的内容：** 有一小部分字符串在任何语言下都保持英文，因为它们会被程序
+> 读取。Conventional Commits 前缀（如 `fix:`）、所有表情符号、命令名与文件名、
+> PR 评论标记 `<!-- forge:deferred-findings -->`、`/forge:finalize` 的分类标签
+> `Fix now` / `Defer` / `Reject`，以及 `/forge:review-design` 的键：`Verdict:`
+> 前缀、`READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、
+> `Fix now` / `Ask` / `Reject`、`spec` / `plan`、十个视角名称、`pass n/<cap>`
+> 计数行。CI 门禁会 grep `Verdict:` 和 `NOT READY`，翻译后就会失效。
+>
+> 权威列表位于 [`commands/watch.md`](./commands/watch.md) 的
+> **Output language** 一节。
 
 ### 前提条件
 
