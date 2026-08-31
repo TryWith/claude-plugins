@@ -38,34 +38,7 @@ guess silently, however well the candidate happens to type itself.
 which the whole run is non-interactive. A path outside those conventions can
 still need one question about its type.
 
-## Section 1: Language and arguments
-
-### Language
-
-Write to the user in the language of the conversation — findings, reasons,
-choice labels, progress messages. The English strings in this file are source
-templates, not literal output. `watch.md`'s **Output language** section is the
-canonical list of what stays English; the keys this command emits are:
-
-`Verdict:` `READY` `NOT READY` `Blocker` `Major` `Minor` `Fix now` `Ask`
-`Reject` `spec` `plan`
-
-`Verdict:` is on the list for a reason the labels after it do not need: it is
-the *prefix* a hook or CI job anchors the verdict line on, and Section 4
-promises that prefix is fixed. Translate it and the line still ends in an
-English `READY` or `NOT READY`, but the caller looking for `^Verdict:` finds no
-line at all and reads no verdict.
-
-`spec` and `plan` are on that list because they are `DOC_TYPE` values, and
-`DOC_TYPE` reaches the output twice — the `(spec)` on the report's header line
-and the `— not applicable (<type>)` rows beneath it. Translating either one
-breaks the same machine-readability the verdict string is kept English for.
-
-Perspective names (`Completeness`, `Consistency`, …) are also emitted in
-English; only their descriptions are translated. So is Section 8's
-`pass n/<cap>` line, for a sharper version of the same reason: it is the only
-carried value with no anchor outside the transcript, so it is read back by
-matching on that literal text.
+## Section 1: Arguments
 
 ### Arguments
 
@@ -344,6 +317,12 @@ command.)
 | I | `YAGNI` | Features not needed now, abstractions built for a hypothetical future, unused extension points | ◎ | ○ |
 | J | `Acceptance` | Is it stated what "done" means and how it will be verified? | ◎ | ◎ |
 
+Each perspective's **letter and English name together are its identifier** —
+`A Completeness`, `D Blind Spots`. The header block and the findings list are
+joined on it, so a reader or a script can reconcile the per-perspective counts
+against the findings beneath them. The names are the key; their descriptions
+above are prose.
+
 Where two perspectives could both claim a finding — a missing test-strategy
 section is both an empty section and a blind spot — file it under exactly one,
 and prefer the more specific.
@@ -544,7 +523,8 @@ yours to make" is not a ready state.
 **The verdict blocks nothing.** This command does not interrupt the superpowers
 workflow. Its value is that a human sees the state at a glance, and that the
 string is stable enough for a hook or CI job to read later. That is also why
-`READY` and `NOT READY` are never translated.
+`READY` and `NOT READY` are the literal tokens a caller matches on — they
+are part of the anchor, not prose that varies with the reader.
 
 `READY` is a substring of `NOT READY`, so a reader that greps for the bare word
 matches both and reads every failure as a pass. Emit the verdict on its own

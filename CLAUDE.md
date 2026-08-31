@@ -33,12 +33,12 @@ Local end-to-end install before pushing:
 
 ### i18n: English source, conversation-language output
 
-All command files are written in English as the **source language**. At execution time Claude writes to the user in the language of the conversation — that is its default behaviour, so there is no resolution step and no env var. The one thing that is not default is the set of strings that must stay English; `plugins/forge/commands/watch.md`'s **Output language** section is the canonical list.
+All command files are written in English as the **source language**. At execution time Claude writes to the user in the language of the conversation. That is its default behaviour — there is no resolution step, no env var, and no translation table.
 
 When editing command files:
 - Keep prose and template strings in English
 - Do **not** hard-code Japanese / other-language strings into command files — they belong only in the trilingual README
-- **Not translated** (intentionally), because something reads them mechanically: Conventional Commits prefixes (`fix:`, `feat:`); status emoji (🔭 ✅ ⚠️ 🎉 ⏳ ❌); command and file names; marker strings such as `<!-- forge:deferred-findings -->`; the `Verdict:` prefix and the verdict, severity and disposition labels (`READY`, `NOT READY`, `Blocker`, `Major`, `Minor`, `Fix now`, `Ask`, `Defer`, `Reject`) — as labels, not where the same word runs inside a sentence; document-type keys (`spec`, `plan`); perspective names (`Completeness`, `Consistency`, …); and loop-counter lines (`pass n/<cap>`). **Extend `watch.md`'s table first, then mirror the category here** — a key declared only inside one command file is a key the next author will translate.
+- Where a string is **read by something rather than by a person** — a `grep` in a hook, a Conventional Commits parser, a marker the command finds its own PR comment by, a literal it reads back out of its own output — say so **where that string is defined**, and say what reads it. Claude keeps it verbatim because it is an identifier, not because a list told it to. A separate "do not translate" table is a copy of that fact, and copies drift: every i18n defect in this plugin's history was a table that had fallen behind the thing it described.
 
 ### Two-level command composition
 

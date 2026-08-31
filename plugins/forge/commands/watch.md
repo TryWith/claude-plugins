@@ -15,51 +15,7 @@ running `/forge:finalize` instead.
 
 ---
 
-## Section 1: Output language
-
-Write to the user in the language of the conversation. That is Claude's default
-behaviour, so there is nothing to resolve and no preamble to run — this section
-exists for the one thing that is **not** default: the words that must stay in
-English no matter what language the rest of the output is in.
-
-The English strings throughout every forge command file are **source
-templates**, not literal output. Translate them. The exceptions are below.
-
-### Never translated
-
-These are machine-readable keys, not prose. A translated key breaks something
-concrete — a `grep` in a hook, a Conventional Commits parser, a literal this
-plugin reads back out of its own output.
-
-| Item | Why it must stay English |
-|------|--------------------------|
-| Conventional Commits prefixes | `fix:`, `feat:` — parsed by tooling and by convention |
-| Emoji | 🔭 ✅ ⚠️ 🎉 ⏳ ❌ 🔔 🛰 — language-neutral already |
-| File and command names | `/forge:finalize`, `watch.md` — proper nouns |
-| Placeholders in templates | `{pr_number}`, `{repo}` — substituted, not read |
-| Marker strings | `<!-- forge:deferred-findings -->` — `finalize.md` finds its own PR comment by matching this byte-for-byte |
-| Verdict prefix and labels | `Verdict:`, `READY`, `NOT READY` — a CI gate greps for these |
-| Severity labels | `Blocker`, `Major`, `Minor` — the verdict formula is stated in terms of them |
-| Disposition labels | `Fix now`, `Ask`, `Reject` (`/forge:review-design`); `Fix now`, `Defer`, `Reject` (`/forge:finalize`) |
-| Document type keys | `spec`, `plan` — emitted on report headers and in `— not applicable (<type>)` rows |
-| Perspective names | `Completeness`, `Consistency`, `Repo Grounding`, `Blind Spots`, `Buildability`, `Scope`, `Assumptions`, `Alternatives`, `YAGNI`, `Acceptance` — names in English, descriptions translated |
-| Loop-counter lines | `pass n/<cap>` — `/forge:review-design` reads its own pass count back by matching this literal |
-
-**Labels only.** These stay English where they are *labels* — a report row, a
-`Disposition:` line, a triage heading. The same word running inside a sentence
-is prose: `/forge:finalize`'s "Fix now, defer to a follow-up, or accept the
-risk?" reads naturally in the conversation's language.
-
-### Adding to this list
-
-This table is the canonical list for every forge command. A command that emits
-a new machine-readable key adds a row **here**, and mirrors the category in
-`CLAUDE.md`'s i18n bullet. A key declared only inside one command file is a key
-the next command author will translate.
-
----
-
-## Section 2: Watch loop
+## Watch loop
 
 ### Initialization
 
@@ -677,7 +633,7 @@ done
 
 ---
 
-## Section 3: Completion notification
+## Completion notification
 
 Run after the watch loop exits (either via success-`break` or cap-`break`).
 

@@ -120,8 +120,7 @@ Japanese and the output is Japanese; in English and it is English.
 > the ten perspective names, and the `pass n/<cap>` counter line. A CI gate
 > greps for `Verdict:` and `NOT READY`; translating them would break it.
 >
-> The canonical list lives in the **Output language** section of
-> [`commands/watch.md`](./commands/watch.md).
+> Each of these is documented where it is defined, alongside what reads it.
 
 ### Requirements
 
@@ -242,8 +241,7 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 > 10 観点の名前、`pass n/<cap>` のカウンタ行）。CI のゲートは `Verdict:` や
 > `NOT READY` を grep するため、翻訳すると壊れます。
 >
-> 正典のリストは [`commands/watch.md`](./commands/watch.md) の
-> **Output language** 節にあります。
+> それぞれ、定義されている場所に「何がそれを読むのか」と併せて書かれています。
 
 ### 前提条件
 
@@ -359,8 +357,7 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 > `Fix now` / `Ask` / `Reject`、`spec` / `plan`、十个视角名称、`pass n/<cap>`
 > 计数行。CI 门禁会 grep `Verdict:` 和 `NOT READY`，翻译后就会失效。
 >
-> 权威列表位于 [`commands/watch.md`](./commands/watch.md) 的
-> **Output language** 一节。
+> 每一项都记录在其定义之处，并注明是什么在读取它。
 
 ### 前提条件
 

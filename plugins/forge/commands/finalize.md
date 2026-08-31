@@ -6,19 +6,7 @@ description: Run the full post-implementation workflow — commit, push, PR, cod
 
 Run the full post-implementation workflow. Do **not** advance to the next step until the current one fully completes.
 
-## Step 0: Output language
-
-Write to the user in the language of the conversation — logs, notifications,
-commit message bodies, review replies, progress reports. The English strings
-below are source templates, not literal output.
-
-The exceptions are the machine-readable keys listed in `watch.md`'s
-**Output language** section, which is the canonical list for every forge
-command. The ones this command emits: Conventional Commits prefixes (`fix:`),
-emoji, command names, the `<!-- forge:deferred-findings -->` marker, and the
-triage labels `Fix now` / `Defer` / `Reject`.
-
-## Step 0.5: Pre-flight — verify required dependencies
+## Step 0: Pre-flight — verify required dependencies
 
 Before invoking any external slash command, verify that the skills it needs are
 loaded in the current Claude Code session, split by **when** they are needed:
