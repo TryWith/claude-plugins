@@ -966,7 +966,7 @@ After writing, continue to Section 8.
 
 If Section 7 wrote nothing, there is nothing to re-review: the file is byte for
 byte what Section 3 already read, so another pass can only reproduce the report
-you just emitted. Print this arrival's `pass n/<cap>` line the same as any
+you just emitted. Print this arrival's `pass n/3` line the same as any
 other arrival, then skip straight to *Completion output* below, carrying the
 verdict you already have.
 
@@ -1066,11 +1066,11 @@ so the default cap of 3 allows three passes and no fourth.
 
 The count is the **one** carried value with no anchor outside your context:
 `TARGET_FILE` is on disk, the answers were typed by the user, but the count is
-only remembered. So print it — literally `pass n/<cap>`, in English, for the
+only remembered. So print it — literally `pass n/3`, in English, for the
 same reason every other key in this command stays English: this line is read
 back mechanically, and a translated one cannot be. Print it every time you arrive
 here and it survives in the transcript. To recover the count on arrival, read
-back every `pass n/<cap>` line emitted **before** this arrival, take the
+back every `pass n/3` line emitted **before** this arrival, take the
 highest `n`, and **add one** — that sum is this arrival's count, and it is what
 you print. Do not read the highest `n` as the count itself: it is the
 *previous* arrival's number, so taking it verbatim pins the counter where it
@@ -1081,51 +1081,38 @@ would read every pass as the first. Count only the lines **you** emitted on
 arriving here, never one inside quoted document text: when `FORMAT_OK` is `0` a
 finding quotes the offending line verbatim, and a target that documents this
 command — `review-design.md` is itself a hit on Stage 2's `*design*` net —
-carries `pass n/<cap>` in its own prose. Reading a quoted line as an arrival
+carries `pass n/3` in its own prose. Reading a quoted line as an arrival
 inflates the count and ends the loop early.
 
-**No `pass n/<cap>` line yet means this is the first arrival and the count is
+**No `pass n/3` line yet means this is the first arrival and the count is
 1** — the highest `n` is 0 and the rule above adds one, so the two rules agree.
 That is the expected state, not a failure to establish it. "Cannot
 establish" means the lines are there but unreadable or mutually inconsistent.
-**In that case treat the count as at the cap and exit**, the same fail-closed
-rule the guard below applies to the cap itself. Reading an empty transcript as
-"cannot establish" would fail the loop closed on its very first pass and apply
-nothing at all.
+**In that case treat the count as at the cap and exit** — fail closed, because
+a count you cannot read is a count that may already be past 3. Reading an empty
+transcript as "cannot establish" would fail the loop closed on its very first
+pass and apply nothing at all.
 
 ```bash
-# Override with FORGE_MAX_DESIGN_REVIEW_LOOP. A missing, non-numeric or
-# zero-valued setting must fail *closed* — fall back to the default rather than
-# looping unbounded or never looping at all. `finalize.md` guards the same loop
-# in the opposite direction: there it is the *counter* that comes back
-# unreadable and it is set *to* the cap, which stops the loop. Here it is the
-# *cap* itself, and a stop is not the safe answer — the default is.
-MAX_DESIGN_REVIEW_LOOP="${FORGE_MAX_DESIGN_REVIEW_LOOP:-3}"
-# `case` rejects the non-numeric values. `:-` above already turned an unset or
-# empty setting into 3, so the `''` pattern is belt and braces, not the thing
-# that catches those. The `-gt 0` test then rejects the zero-valued ones `case`
-# cannot enumerate — `0` is one pattern, but `00` and `000` are numeric, pass
-# the pattern, and compare equal to zero, which would put the very first pass
-# at the cap and stop the loop before it ran.
-case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
-[ "$MAX_DESIGN_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_DESIGN_REVIEW_LOOP=3
-# Say so out loud when an explicit override was rejected. Substituting 3 for a
-# `0` the user typed runs three passes where they asked for none, and silence
-# leaves them reading those passes as the variable being ignored outright.
-[ -z "${FORGE_MAX_DESIGN_REVIEW_LOOP:-}" ] \
-  || [ "$FORGE_MAX_DESIGN_REVIEW_LOOP" = "$MAX_DESIGN_REVIEW_LOOP" ] \
-  || echo "⚠️ FORGE_MAX_DESIGN_REVIEW_LOOP=$FORGE_MAX_DESIGN_REVIEW_LOOP is not a positive integer — using $MAX_DESIGN_REVIEW_LOOP" >&2
-# Both lines above are user-facing: translate them to the conversation's
-# language, keeping the emoji, the variable name and the number as-is. Unlike
-# `pass n/<cap>` below, nothing reads them back.
-echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
+# The cap is the constant 3. See below for why it takes no override.
+echo "Iteration cap: 3"
 ```
 
-The cap is 3 by default (override with `FORGE_MAX_DESIGN_REVIEW_LOOP`) — lower
-than the review loop in `finalize.md`, which allows 10. Code has CI as an
-outside judge; a design document does not. Each extra pass is the same context
+The cap is **3, fixed** — lower than the review loop in `finalize.md`, which
+allows 10. Code has CI as an outside judge; a design document does not. Each extra pass is the same context
 re-reading prose it just wrote, and the returns fall off quickly. **The only
 information entering the loop from outside is the answers the user gave.**
+
+That sentence is also why this cap takes **no environment override**, where the
+caps in `finalize.md` and `watch.md` do. What those two bound is **waiting on
+something external** — a code-review agent, a CI run — whose speed only the
+operator knows, so an override there has a setting worth typing. This cap bounds
+this context re-reading its own prose. Raising it cannot add information the
+loop does not have, and lowering it saves nothing, because a converged loop
+exits on its own without reaching the cap. A knob with no useful position is not
+a feature: making the number settable is what creates the unset, non-numeric,
+zero and disagreeing-between-passes cases, and every one of them was then a rule
+this section had to carry.
 
 On reaching the cap, report the current verdict and exit **normally**. Hitting
 the cap is a result, not an error.
@@ -1142,8 +1129,7 @@ off to implementation* block, which a `READY` plan reaches on this path too.
 
 | Value | Content |
 |-------|---------|
-| `PASS_COUNT` | This arrival's pass number. Carried the way Section 1 says to carry everything, and printed as `pass n/<cap>` on every arrival so it survives in the transcript — it is the only carried value with no anchor on disk or in the user's answers |
-| `MAX_DESIGN_REVIEW_LOOP` | The cap the block above resolved. Re-run that block on each arrival rather than assuming `3`: it is a shell value, so Section 1's rule applies to it too, and an override the second pass never re-reads prints a `<cap>` that disagrees with the first pass's |
+| `PASS_COUNT` | This arrival's pass number. Carried the way Section 1 says to carry everything, and printed as `pass n/3` on every arrival so it survives in the transcript — it is the only carried value with no anchor on disk or in the user's answers |
 
 ### Completion output
 
