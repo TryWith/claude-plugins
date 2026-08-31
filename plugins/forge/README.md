@@ -124,6 +124,12 @@ Japanese and the output is Japanese; in English and it is English.
 
 ### Requirements
 
+`/forge:review-design` needs one thing: a **git repository**. It resolves every
+path from the repository root, so it has to be run inside one — nothing else on
+this list applies to it.
+
+`/forge:finalize` and `/forge:watch` additionally need:
+
 - `gh` CLI installed and authenticated
 - macOS (for the notification feature)
 - A CI system such as GitHub Actions configured on the repo
@@ -244,6 +250,12 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 
 ### 前提条件
 
+`/forge:review-design` に必要なのは **git リポジトリ** だけです。全てのパスを
+リポジトリルート基準で解決するため、リポジトリ内で実行してください。以下の
+項目はいずれもこのコマンドには不要です。
+
+`/forge:finalize` と `/forge:watch` には加えて以下が必要です:
+
 - `gh` CLI がインストール・認証済み
 - macOS（通知機能を利用する場合）
 - リポジトリで GitHub Actions などの CI が稼働
@@ -358,6 +370,11 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 > 读取它；在这里再列一份就成了第二个副本，而这类副本在新增一个键时就会过时。
 
 ### 前提条件
+
+`/forge:review-design` 只需要一件事：一个 **git 仓库**。它从仓库根目录解析
+所有路径，因此必须在仓库内运行；下面列出的其余项均与它无关。
+
+`/forge:finalize` 与 `/forge:watch` 则额外需要：
 
 - 已安装并完成认证的 `gh` CLI
 - macOS（如需使用通知功能）

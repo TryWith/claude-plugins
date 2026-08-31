@@ -145,13 +145,16 @@ REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/fo
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
-# Override with FORGE_MAX_REVIEW_LOOP. A non-numeric or zero override would
-# make 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]` error, and a failed
-# comparison returns non-zero — the cap would never fire. Fall back to the
-# default rather than run unbounded.
+# Override with FORGE_MAX_REVIEW_LOOP. Only a positive integer with no leading
+# zero is taken, and the three rejected shapes fail three different ways: a
+# non-numeric override makes 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]`
+# error, and a failed comparison returns non-zero — the cap would never fire;
+# `0` makes that same test true on the first pass, so no review ever starts;
+# and a leading zero is read as octal by `[ -ge ]`, so `010` would cap at 8.
+# Fall back to the default rather than any of the three — one `case` covers
+# all of them.
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
-case "$MAX_REVIEW_LOOP" in ''|*[!0-9]*) MAX_REVIEW_LOOP=10 ;; esac
-[ "$MAX_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_REVIEW_LOOP=10
+case "$MAX_REVIEW_LOOP" in ''|*[!0-9]*|0*) MAX_REVIEW_LOOP=10 ;; esac
 REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
 REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
 # Working buffers. The durable home for deferred findings is the PR comment
@@ -387,10 +390,11 @@ Give **every** unapplied finding exactly one outcome, in writing:
   command. Record it — deferring is not dropping.
 - **Reject** — wrong, or a false positive. One line of reason.
 
-`Fix now`, `Defer` and `Reject` are the keys this triage is read back on: 2-7's
-exit conditions name them by word, and a finding you classified keeps that word
-across every later iteration. They stay English however the finding beside them
-is written.
+`Fix now`, `Defer` and `Reject` are the keys this triage is read back on: the
+*stays classified* rule below names `Defer` and `Reject` by word, 2-3's outcome
+table and 2-7's exit conditions both turn on "nothing came out as *Fix now*",
+and a finding you classified keeps that word across every later iteration. They
+stay English however the finding beside them is written.
 
 Default to the reviewer's judgment. Override it to **Fix now** only for the two
 categories named above; "it would read a bit nicer" is a **Defer**. Silently

@@ -23,15 +23,28 @@ running `/forge:finalize` instead.
 PR_NUMBER=$(gh pr view --json number --jq '.number')
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+# `CONSECUTIVE_CLEAR`, `WATCH_ITER` and the two caps below are values *you*
+# carry in the conversation, the way `finalize.md` carries `REVIEW_MODE` — not
+# shell state. The loop body runs as a series of separate bash blocks (the
+# state-file rationale further down says so), so a plain shell variable resets
+# on every iteration: `WATCH_ITER` would pin at 1, `CONSECUTIVE_CLEAR` would
+# never reach 2, and an unset `MAX_WATCH_ITER` would make
+# `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error — the cap never fires and the
+# watch never ends. Substitute the current numbers into each later block
+# literally.
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
-# ~2 h at 5-min interval; override with FORGE_MAX_WATCH_ITER. A non-numeric or
-# zero override would make `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error every
-# iteration — in bash a failed comparison returns non-zero, so the cap never
-# fires and the loop runs unbounded. Fall back to the default rather than that.
+# ~2 h at 5-min interval; override with FORGE_MAX_WATCH_ITER. Only a positive
+# integer with no leading zero is taken, and the three rejected shapes fail
+# three different ways: a non-numeric override makes
+# `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error every iteration — in bash a
+# failed comparison returns non-zero, so the cap never fires and the loop runs
+# unbounded; `0` makes that same test true on iteration 1, aborting before a
+# single check; and a leading zero is read as octal by `[ -gt ]`, so `010`
+# would silently cap at 8 and `08` would error. Fall back to the default rather
+# than any of the three — one `case` covers all of them.
 MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"
-case "$MAX_WATCH_ITER" in ''|*[!0-9]*) MAX_WATCH_ITER=24 ;; esac
-[ "$MAX_WATCH_ITER" -gt 0 ] 2>/dev/null || MAX_WATCH_ITER=24
+case "$MAX_WATCH_ITER" in ''|*[!0-9]*|0*) MAX_WATCH_ITER=24 ;; esac
 # Say so out loud when an explicit override was rejected — silence reads as the
 # variable being ignored outright. Report the value actually in force rather
 # than a hard-coded 24, so this line cannot drift from the default above.
@@ -46,11 +59,11 @@ case "$MAX_WATCH_ITER" in ''|*[!0-9]*) MAX_WATCH_ITER=24 ;; esac
 # non-numeric override errors on every iteration and the stuck notification
 # never fires — silently, because the loop has no other symptom. Zero is
 # rejected for the same reason: `count` starts at 1, so `-eq 0` is never true
-# and stuck detection is off. `$((STUCK_THRESHOLD * 5))` in the message below
-# needs a number too.
+# and stuck detection is off. A leading zero goes with them: `[ -eq ]` reads
+# `010` as octal 8. `$((STUCK_THRESHOLD * 5))` in the message below needs a
+# number too.
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"
-case "$STUCK_THRESHOLD" in ''|*[!0-9]*) STUCK_THRESHOLD=6 ;; esac
-[ "$STUCK_THRESHOLD" -gt 0 ] 2>/dev/null || STUCK_THRESHOLD=6
+case "$STUCK_THRESHOLD" in ''|*[!0-9]*|0*) STUCK_THRESHOLD=6 ;; esac
 # User-facing: translate it to the conversation's language, keeping the emoji
 # and the variable name as-is.
 [ -z "${FORGE_STUCK_THRESHOLD:-}" ] \
