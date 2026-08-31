@@ -25,7 +25,15 @@ REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
-MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
+# ~2 h at 5-min interval; override with FORGE_MAX_WATCH_ITER. A non-numeric or
+# zero override would make `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error every
+# iteration — in bash a failed comparison returns non-zero, so the cap never
+# fires and the loop runs unbounded. Fall back to the default rather than that.
+MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"
+case "$MAX_WATCH_ITER" in ''|*[!0-9]*) MAX_WATCH_ITER=24 ;; esac
+[ "$MAX_WATCH_ITER" -gt 0 ] 2>/dev/null || MAX_WATCH_ITER=24
+[ "$MAX_WATCH_ITER" = "${FORGE_MAX_WATCH_ITER:-$MAX_WATCH_ITER}" ] || \
+  echo "⚠️ FORGE_MAX_WATCH_ITER='${FORGE_MAX_WATCH_ITER}' is not a positive integer — using 24" >&2
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
 
 # Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
@@ -79,6 +87,9 @@ Increment the iteration counter and bail if the cap was hit.
 Skip the 5-minute wait on the first iteration; otherwise wait:
 
 ```bash
+# These three echoes are user-facing progress reports — translate them to the
+# conversation's language before emitting, keeping the emoji, the timestamps and
+# the variable name `MAX_WATCH_ITER` as-is.
 WATCH_ITER=$((WATCH_ITER + 1))
 if [ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]; then
   echo "⛔ Reached MAX_WATCH_ITER=$MAX_WATCH_ITER without converging. Aborting and reporting."
@@ -260,9 +271,12 @@ only when threads and CR are both clear — fix what's actionable first.
 
 ```bash
 CONSECUTIVE_CLEAR=$((CONSECUTIVE_CLEAR + 1))
+# User-facing — translate, keeping the emoji and the counter as-is.
 echo "✅ Clear $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
 
 if [ "$CONSECUTIVE_CLEAR" -ge 2 ]; then
+  # "success" is a machine key read back by the Completion notification section
+  # (`[ "$WATCH_RESULT" = "success" ]`), never shown to the user — keep English.
   echo "success" > "$WATCH_RESULT_FILE"   # consumed by Completion notification
   break                                    # mirror Phase 1's cap-check break
 fi

@@ -145,7 +145,13 @@ REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/fo
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
+# Override with FORGE_MAX_REVIEW_LOOP. A non-numeric or zero override would
+# make 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]` error, and a failed
+# comparison returns non-zero — the cap would never fire. Fall back to the
+# default rather than run unbounded.
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
+case "$MAX_REVIEW_LOOP" in ''|*[!0-9]*) MAX_REVIEW_LOOP=10 ;; esac
+[ "$MAX_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_REVIEW_LOOP=10
 REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
 REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
 # Working buffers. The durable home for deferred findings is the PR comment
