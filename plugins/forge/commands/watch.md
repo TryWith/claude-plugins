@@ -32,8 +32,14 @@ WATCH_ITER=0
 MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"
 case "$MAX_WATCH_ITER" in ''|*[!0-9]*) MAX_WATCH_ITER=24 ;; esac
 [ "$MAX_WATCH_ITER" -gt 0 ] 2>/dev/null || MAX_WATCH_ITER=24
-[ "$MAX_WATCH_ITER" = "${FORGE_MAX_WATCH_ITER:-$MAX_WATCH_ITER}" ] || \
-  echo "⚠️ FORGE_MAX_WATCH_ITER='${FORGE_MAX_WATCH_ITER}' is not a positive integer — using 24" >&2
+# Say so out loud when an explicit override was rejected — silence reads as the
+# variable being ignored outright. Report the value actually in force rather
+# than a hard-coded 24, so this line cannot drift from the default above.
+# User-facing: translate it to the conversation's language, keeping the emoji
+# and the variable name as-is.
+[ -z "${FORGE_MAX_WATCH_ITER:-}" ] \
+  || [ "$FORGE_MAX_WATCH_ITER" = "$MAX_WATCH_ITER" ] \
+  || echo "⚠️ FORGE_MAX_WATCH_ITER='${FORGE_MAX_WATCH_ITER}' is not a positive integer — using $MAX_WATCH_ITER" >&2
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
 
 # Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
@@ -68,7 +74,10 @@ NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMB
 
 # Result marker consumed by the Completion notification section. Default to
 # "aborted" so any abnormal exit (cap hit, error, killed) produces an honest
-# notification rather than a false "Ready to merge".
+# notification rather than a false "Ready to merge". Like "success" below,
+# "aborted" is a machine key: the notification branch reads this file back and
+# tests it against those literals, so keep both English whatever language the
+# report around them is written in.
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
@@ -376,6 +385,7 @@ check names as-is.) Then **return to Phase 1**.
 
 ```bash
 CONSECUTIVE_CLEAR=0
+# User-facing — translate, keeping the emoji and the timestamp as-is.
 echo "⚠️ Problems detected — counter reset ($(date '+%H:%M'))"
 ```
 
@@ -669,6 +679,8 @@ FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 
 WATCH_RESULT=$(cat "$WATCH_RESULT_FILE" 2>/dev/null || echo "aborted")
+# The label is user-facing — translate it. `$WATCH_RESULT` is the machine key
+# the branch below tests (`success` / `aborted`); print it verbatim.
 echo "🛰  Outcome: $WATCH_RESULT"
 ```
 

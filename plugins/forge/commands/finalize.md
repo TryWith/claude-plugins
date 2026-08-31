@@ -182,6 +182,14 @@ forge_snapshot() {
 FORGE_ENV
 
 . "$REVIEW_ENV_FILE"
+# Say so out loud when an explicit override was rejected — silence leaves the
+# user reading the clamped runs as the variable being ignored outright. Emitted
+# here, once, rather than inside the env file: that file is sourced by every
+# later Step 2 block and would repeat the warning on each one.
+# User-facing: translate it, keeping the emoji and the variable name as-is.
+[ -z "${FORGE_MAX_REVIEW_LOOP:-}" ] \
+  || [ "$FORGE_MAX_REVIEW_LOOP" = "$MAX_REVIEW_LOOP" ] \
+  || echo "⚠️ FORGE_MAX_REVIEW_LOOP='${FORGE_MAX_REVIEW_LOOP}' is not a positive integer — using $MAX_REVIEW_LOOP" >&2
 echo 0 > "$REVIEW_LOOP_FILE"
 ```
 

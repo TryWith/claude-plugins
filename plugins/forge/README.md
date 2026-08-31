@@ -89,7 +89,8 @@ uniquely determined answer (`Fix now`) are applied without being asked. Under
 (override with `FORGE_MAX_DESIGN_REVIEW_LOOP`).
 
 ```bash
-# Report on the newest design document
+# Report on the newest design document. In the standard superpowers layout a
+# feature's spec and plan share a date, so this normally asks which one you mean.
 /forge:review-design
 
 # Review a specific file and apply fixes
@@ -111,16 +112,16 @@ the language of your conversation. Nothing to configure — talk to Claude in
 Japanese and the output is Japanese; in English and it is English.
 
 > **Not translated:** a handful of strings stay English in every language,
-> because something reads them mechanically. Conventional Commits prefixes
-> (`fix:` etc.), all emoji, command and file names, the
-> `<!-- forge:deferred-findings -->` PR-comment marker, `/forge:finalize`'s
-> triage labels `Fix now` / `Defer` / `Reject`, and `/forge:review-design`'s
-> keys: the `Verdict:` prefix, `READY` / `NOT READY`,
-> `Blocker` / `Major` / `Minor`, `Fix now` / `Ask` / `Reject`, `spec` / `plan`,
-> the ten perspective names, and the `pass n/<cap>` counter line. A CI gate
-> greps for `Verdict:` and `NOT READY`; translating them would break it.
+> because something reads them mechanically rather than a person reading them —
+> Conventional Commits prefixes (`fix:` etc.), all emoji, command and file
+> names, and the internal keys the two workflow commands read back out of their
+> own output. A CI gate greps `/forge:review-design`'s output for `Verdict:`
+> and `NOT READY`; translating those would break it.
 >
-> Each of these is documented where it is defined, alongside what reads it.
+> This is deliberately not a list. Every such string is marked where it is
+> defined in the command file, alongside what reads it — a roster kept here as
+> well would be a second copy, and a copy of a fact like this drifts out of date
+> the first time a key is added.
 
 ### Requirements
 
@@ -212,7 +213,8 @@ Japanese and the output is Japanese; in English and it is English.
 で変更可）。
 
 ```bash
-# 最新の設計書をレポート
+# 最新の設計書をレポート。superpowers の標準構成では同じ機能の spec と plan が
+# 同じ日付になるため、通常はどちらを見るか質問されます。
 /forge:review-design
 
 # ファイルを指定して修正まで実行
@@ -232,16 +234,15 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 メッセージ・通知・コミットメッセージ本文・レビューリプライは、**会話している
 言語で返ります。**設定は不要です。日本語で話しかければ日本語、英語なら英語です。
 
-> **翻訳されないもの:** 機械が読む文字列は、どの言語でも英語のままです。
-> Conventional Commits の接頭辞（`fix:` など）、すべての絵文字、コマンド名と
-> ファイル名、PR コメントのマーカー `<!-- forge:deferred-findings -->`、
-> `/forge:finalize` のトリアージラベル `Fix now` / `Defer` / `Reject`、
-> `/forge:review-design` のキー（`Verdict:` 接頭辞、`READY` / `NOT READY`、
-> `Blocker` / `Major` / `Minor`、`Fix now` / `Ask` / `Reject`、`spec` / `plan`、
-> 10 観点の名前、`pass n/<cap>` のカウンタ行）。CI のゲートは `Verdict:` や
-> `NOT READY` を grep するため、翻訳すると壊れます。
+> **翻訳されないもの:** 人ではなく機械が読む文字列は、どの言語でも英語のまま
+> です。Conventional Commits の接頭辞（`fix:` など）、すべての絵文字、コマンド名
+> とファイル名、そして各コマンドが自身の出力から読み戻す内部キーが該当します。
+> CI のゲートは `/forge:review-design` の出力を `Verdict:` や `NOT READY` で
+> grep するため、これらを翻訳すると壊れます。
 >
-> それぞれ、定義されている場所に「何がそれを読むのか」と併せて書かれています。
+> ここに一覧は置きません。該当する文字列はすべて、コマンドファイル内の定義箇所
+> に「何がそれを読むのか」と併せて明記してあります。ここにも一覧を置くとそれは
+> 二つ目の複製になり、キーが増えた最初の一回で古くなります。
 
 ### 前提条件
 
@@ -329,7 +330,8 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 默认最多 3 轮（可用 `FORGE_MAX_DESIGN_REVIEW_LOOP` 覆盖）。
 
 ```bash
-# 报告最新的设计文档
+# 报告最新的设计文档。在 superpowers 的标准布局中，同一功能的 spec 与 plan
+# 日期相同，因此通常会询问你指的是哪一个。
 /forge:review-design
 
 # 指定文件并应用修复
@@ -349,15 +351,13 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 消息、通知、提交消息正文、评审回复都会以**你对话所用的语言**返回。无需配置：
 用日语交流就输出日语，用英语就输出英语。
 
-> **不翻译的内容：** 有一小部分字符串在任何语言下都保持英文，因为它们会被程序
-> 读取。Conventional Commits 前缀（如 `fix:`）、所有表情符号、命令名与文件名、
-> PR 评论标记 `<!-- forge:deferred-findings -->`、`/forge:finalize` 的分类标签
-> `Fix now` / `Defer` / `Reject`，以及 `/forge:review-design` 的键：`Verdict:`
-> 前缀、`READY` / `NOT READY`、`Blocker` / `Major` / `Minor`、
-> `Fix now` / `Ask` / `Reject`、`spec` / `plan`、十个视角名称、`pass n/<cap>`
-> 计数行。CI 门禁会 grep `Verdict:` 和 `NOT READY`，翻译后就会失效。
+> **不翻译的内容：** 由程序而非人读取的字符串，在任何语言下都保持英文：
+> Conventional Commits 前缀（如 `fix:`）、所有表情符号、命令名与文件名，以及
+> 各命令从自身输出中读回的内部键。CI 门禁会在 `/forge:review-design` 的输出中
+> grep `Verdict:` 和 `NOT READY`，翻译后就会失效。
 >
-> 每一项都记录在其定义之处，并注明是什么在读取它。
+> 这里刻意不列清单。每个这样的字符串都在命令文件的定义处标注，并注明是什么在
+> 读取它；在这里再列一份就成了第二个副本，而这类副本在新增一个键时就会过时。
 
 ### 前提条件
 

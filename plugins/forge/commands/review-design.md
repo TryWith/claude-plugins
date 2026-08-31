@@ -34,10 +34,12 @@ when the search had to fall through to Stage 3 or to Stage 2's `*design*` /
 `*plan*` guess patterns. Those last are guesses, and Section 2 never takes a
 guess silently, however well the candidate happens to type itself.
 
-**For unattended use, pass an explicit, self-typing `<path>`** — for example
+**For unattended use, pass an explicit, self-typing `<path>` and omit
+`--fix`** — for example
 `docs/superpowers/specs/2026-08-29-foo-design.md`. That is the condition under
 which the whole run is non-interactive. A path outside those conventions can
-still need one question about its type.
+still need one question about its type, and `--fix` asks by construction — it
+is the mode that puts design decisions to the user.
 
 ## Section 1: Arguments
 
@@ -91,6 +93,9 @@ IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
 <the path the caller passed>
 FORGE_TARGET_PATH
 
+# `ok` / `unusable` are markers you read back out of this block's own output,
+# not a message to the user — keep them English, and report the outcome to the
+# user in the conversation's language yourself.
 if [ -f "$FORGE_TARGET" ] && [ -r "$FORGE_TARGET" ]; then
   echo "ok"
 else
@@ -242,7 +247,12 @@ header line. Resolve the companion spec in this order:
    a spec can sit at `docs/architecture-design.md` with no `specs/` component at
    all. Rank the hits by date-and-topic match against the plan's filename and
    take the best; if two or more tie, or the best match is only a guess, ask
-   rather than pick. Stage 3 alone: it is rooted at `.` and Stage 2
+   rather than pick — **but only when `FIX_MODE` is `1`.** A report-only run
+   never asks anything a self-typing `<path>` did not already settle, and this
+   step is reached with such a path on the recommended unattended route. When
+   `FIX_MODE` is `0`, take no spec: record the "no companion spec" degradation
+   below, name the tied or guessed candidates in it so the reader can pass one
+   explicitly, and continue. Stage 3 alone: it is rooted at `.` and Stage 2
    at `docs/`, so it already returns everything Stage 2 would, and running both
    walks the repository twice for one set of hits. The preference that overrides
    the default spec location overrides it for this lookup too; stopping at step
@@ -398,9 +408,10 @@ rather than asserting it is missing.
 # Do the paths the document treats as already present actually exist? Check
 # them all in one block. Creation targets do not belong here — see above.
 # Paths are resolved relative to the current directory, and the paths a design
-# document names are almost always relative to the repository root, so run this
-# from the root (`cd "$(git rev-parse --show-toplevel)"`) or a document that is
-# perfectly grounded reports every path MISSING.
+# document names are almost always relative to the repository root, so the
+# block starts by moving there — a comment telling the reader to `cd` first is
+# not enough, since a block invoked from a subdirectory would then report every
+# path MISSING for a document that is perfectly grounded.
 # These paths come from the document, so they are *data*, never script text:
 # feed them on stdin through a quoted heredoc. Quoting the delimiter
 # (`<<'PATHS'`) is what makes the body literal. Double quotes are NOT enough —
@@ -412,6 +423,7 @@ rather than asserting it is missing.
 # in this command is. `printf`, not `echo`: a `sh` whose `echo` interprets
 # backslash escapes would mangle a path containing one, and this block exists
 # to report paths accurately.
+cd "$(git rev-parse --show-toplevel)" || exit 1
 while IFS= read -r p; do
   [ -n "$p" ] || continue
   if [ -e "$p" ]; then printf 'ok      %s\n' "$p"; else printf 'MISSING %s\n' "$p"; fi
@@ -428,11 +440,29 @@ PATHS
 #
 # This walks the whole tree, and so does Stage 3's `find` — including the rerun
 # the `Spec:` lookup does for a plan given by explicit path. When this run has
-# to do both, issue them as one walk by adding this `-name` pair to Stage 3's
-# expression: same prune, same root, one traversal, and the CLAUDE.md hits are
-# told apart from the `*.md` candidates by their filename.
+# to do both, issue them as one walk: same prune, same root, one traversal, and
+# the CLAUDE.md hits are told apart from the `*.md` candidates by their
+# filename.
 find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
   -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) -print 2>/dev/null
+```
+
+The merged form is written out below rather than described, because merging it
+by hand is a trap: `find`'s implicit `and` binds tighter than `-o`, so pasting
+`-o -name 'CLAUDE.md'` onto the end of Stage 3's expression detaches it from
+the leading `-type f` **and** leaves `-print` attached to that last alternative
+alone — the command then prints only the `CLAUDE.local.md` hits and none of the
+`*.md` candidates, which in a repository with no `CLAUDE.local.md` is no output
+at all, indistinguishable from a clean search. Both `CLAUDE.md` and `CLAUDE.local.md` already match
+`-name '*.md'`, so the extra alternatives belong **inside** the existing
+parenthesised group, not beside it:
+
+```bash
+find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
+  -type f -name '*.md' \
+  \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \
+     -o -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) \
+  -print 2>/dev/null | sort
 ```
 
 Read the root file, every file the `find` reported that governs a directory the
@@ -462,11 +492,14 @@ work here because the document's provenance is known.
 
 ### Direction
 
-A–E, G, H and J look for what is **missing**. F and I look for what is
-**excessive**. Every one of the ten sits in exactly one of those two groups —
-a perspective in neither would have no stated direction to look in. A reviewer
-that only looks one way makes documents grow every time its advice is followed;
-both directions are required.
+A–E, G, H and J look for what is **missing**. I looks for what is
+**excessive**. F looks **both** ways, and is the only one that does: a spec
+requirement that maps to no task is missing, a task the spec never called for
+is excessive, and Section 4's severity table splits F on exactly that line.
+Every one of the ten has at least one stated direction — a perspective in
+neither group would have none to look in. A reviewer that only looks one way
+makes documents grow every time its advice is followed; both directions are
+required.
 
 ### Recording a finding
 
@@ -840,8 +873,10 @@ offered, but taking it does not clear the finding in this run.
 
 That question takes a third choice, **The spec is at this path — use it**: the
 lookup can fail on a spec that exists, and a user who knows where it is has no
-way to say so otherwise. Take the path as free text, re-run *Spec
-cross-reference* from step 1 against it, and if it resolves, set `SPEC_FILE`,
+way to say so otherwise. Take the path as free text and run *Spec
+cross-reference*'s existence check against **that** path — not step 1, which
+re-reads the plan's own `Spec:` line and is what already failed. If it
+resolves, set `SPEC_FILE`,
 drop the degradation finding, and run Perspective F's coverage check for real —
 this is the one answer that clears this finding by supplying what was missing
 rather than by editing the document. If the path does not resolve either, say so
@@ -1080,6 +1115,9 @@ case "$MAX_DESIGN_REVIEW_LOOP" in ''|*[!0-9]*) MAX_DESIGN_REVIEW_LOOP=3 ;; esac
 [ -z "${FORGE_MAX_DESIGN_REVIEW_LOOP:-}" ] \
   || [ "$FORGE_MAX_DESIGN_REVIEW_LOOP" = "$MAX_DESIGN_REVIEW_LOOP" ] \
   || echo "⚠️ FORGE_MAX_DESIGN_REVIEW_LOOP=$FORGE_MAX_DESIGN_REVIEW_LOOP is not a positive integer — using $MAX_DESIGN_REVIEW_LOOP" >&2
+# Both lines above are user-facing: translate them to the conversation's
+# language, keeping the emoji, the variable name and the number as-is. Unlike
+# `pass n/<cap>` below, nothing reads them back.
 echo "Iteration cap: $MAX_DESIGN_REVIEW_LOOP"
 ```
 
