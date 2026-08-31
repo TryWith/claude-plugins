@@ -46,6 +46,19 @@ Note that `/plugin install ./plugins/forge` does **not** work — that command
 takes a marketplace, not a plugin directory, and reports
 `Marketplace "./plugins/forge" not found`.
 
+Also note that the clone in step 2 is updated by **git**, not by copying files
+into it. An edit only reaches the cache once it is committed and the clone has
+fetched it, so a live test of an uncommitted change tests nothing.
+
+**Bump the version when you are about to test, not on every commit.** The rule
+above exists so a *live invocation* loads fresh code; it is not a per-commit
+obligation. A review loop that bumps on each of its own fix commits walks the
+version several patch releases in an afternoon, leaves a cache directory behind
+for each one, and makes every document that records the target version stale
+again. Batch it: leave the version alone while iterating, and bump once before
+the run you intend to verify, and once more before merge if anything changed
+after that.
+
 ## Non-obvious conventions
 
 ### Command files are prompts, not scripts
