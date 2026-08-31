@@ -113,8 +113,8 @@ Japanese and the output is Japanese; in English and it is English.
 > **Not translated:** a handful of strings stay English in every language,
 > because something reads them mechanically rather than a person reading them —
 > Conventional Commits prefixes (`fix:` etc.), all emoji, command and file
-> names, and the internal keys the two workflow commands read back out of their
-> own output. A CI gate greps `/forge:review-design`'s output for `Verdict:`
+> names, and the internal keys each command reads back out of its own
+> output. A CI gate greps `/forge:review-design`'s output for `Verdict:`
 > and `NOT READY`; translating those would break it.
 >
 > This is deliberately not a list. Every such string is marked where it is

@@ -93,13 +93,21 @@ IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
 <the path the caller passed>
 FORGE_TARGET_PATH
 
-# `ok` / `unusable` are markers you read back out of this block's own output,
-# not a message to the user — keep them English, and report the outcome to the
-# user in the conversation's language yourself.
-if [ -f "$FORGE_TARGET" ] && [ -r "$FORGE_TARGET" ]; then
-  echo "ok"
+# `ok`, `missing`, `not-a-regular-file` and `unreadable` are markers you read
+# back out of this block's own output, not messages to the user — keep them
+# English, and report the outcome to the user in the conversation's language
+# yourself. They are four markers rather than one because the section above
+# says to *say* which of the three failures it was: a typo, a directory and a
+# permission problem need different things from the reader, and one `unusable`
+# cannot tell them apart.
+if [ ! -e "$FORGE_TARGET" ]; then
+  echo "missing"
+elif [ ! -f "$FORGE_TARGET" ]; then
+  echo "not-a-regular-file"
+elif [ ! -r "$FORGE_TARGET" ]; then
+  echo "unreadable"
 else
-  echo "unusable"
+  echo "ok"
 fi
 ```
 
@@ -117,6 +125,16 @@ location, so the default paths are a starting point, not a guarantee. Search in
 this order and stop at the first stage that yields a candidate:
 
 ```bash
+# Every stage below is written relative to the repository root — Stage 3's
+# comment says "anywhere in the repository", and Perspective C resolves the
+# paths a document names from the root too. Move there first: invoked from a
+# subdirectory these `find`s would otherwise walk that subtree alone, report
+# "nothing found" for a document sitting one level up, and — through the
+# *Spec cross-reference* rerun below — raise the "no companion spec" `Major`
+# that step exists to prevent. Assign before `cd`: `cd "$(...)"` on one line
+# succeeds on an empty substitution and silently keeps the wrong directory.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+
 # Stage 1 — the documented default locations
 find docs/superpowers/specs docs/superpowers/plans -name '*.md' -type f 2>/dev/null | sort
 
@@ -423,7 +441,11 @@ rather than asserting it is missing.
 # in this command is. `printf`, not `echo`: a `sh` whose `echo` interprets
 # backslash escapes would mangle a path containing one, and this block exists
 # to report paths accurately.
-cd "$(git rev-parse --show-toplevel)" || exit 1
+# `cd "$(git rev-parse --show-toplevel)"` on one line does NOT work: outside a
+# repository the substitution is empty, `cd ""` succeeds, and the block runs on
+# from wherever it was invoked — the very failure the paragraph above forbids.
+# Assign first, then `cd`, so a failed `rev-parse` is what stops the block.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
 while IFS= read -r p; do
   [ -n "$p" ] || continue
   if [ -e "$p" ]; then printf 'ok      %s\n' "$p"; else printf 'MISSING %s\n' "$p"; fi
@@ -458,6 +480,11 @@ at all, indistinguishable from a clean search. Both `CLAUDE.md` and `CLAUDE.loca
 parenthesised group, not beside it:
 
 ```bash
+# Same root as both halves it merges — the CLAUDE.md `find` above inherits the
+# `cd` at the top of that block, and the staged search does its own. Without it
+# a run from a subdirectory never sees the repository-root CLAUDE.md, the one
+# file this perspective is told to read first.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
 find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
   -type f -name '*.md' \
   \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \
@@ -758,7 +785,11 @@ Rules for the header block:
   path in double quotes in the hint when it contains a space or any other shell
   metacharacter — Section 1 treats a second remaining token as a second path
   and stops, so an unquoted `docs/my design/foo.md` prints a hint that is an
-  error when the reader runs it
+  error when the reader runs it. Section 1 groups on single quotes too, so a
+  path containing a `"` takes single quotes instead; one containing both is
+  quotable neither way — print it bare and say the path needs quoting by hand,
+  the same carve-out Section 8's `git diff` pointer makes for its own quoting
+  rule
 - **The hint is printed only when `FIX_MODE` is `0` and the report carries at
   least one `Fix now` or `Ask`.** A run that is already applying fixes must not
   tell the reader to pass `--fix`, and neither must a report with nothing for a
@@ -964,11 +995,22 @@ After writing, continue to Section 8.
 
 ### Loop
 
-If Section 7 wrote nothing, there is nothing to re-review: the file is byte for
-byte what Section 3 already read, so another pass can only reproduce the report
-you just emitted. Print this arrival's `pass n/3` line the same as any
+If Section 7 wrote nothing, there is normally nothing to re-review: the file is
+byte for byte what Section 3 already read, so another pass can only reproduce
+the report you just emitted. Print this arrival's `pass n/3` line the same as any
 other arrival, then skip straight to *Completion output* below, carrying the
 verdict you already have.
+
+**Unless the run itself learned something the last report did not have.** That
+justification is about the *file*, and one answer changes the review without
+changing the file: Section 6's *The spec is at this path* sets `SPEC_FILE` for a
+plan whose companion spec the lookup missed, and Perspective F's coverage check
+then runs for real against a spec Section 3 never saw. Its findings — coverage
+gaps that are routinely `Blocker`s — are not in the report you just emitted, and
+taking the shortcut would drop them and the verdict they change. When
+`SPEC_FILE` was set this pass and Section 7 wrote nothing, re-run Sections 3 and
+4 anyway and re-emit Section 5's report; only the document is unchanged, so
+re-use Perspective C's results exactly as the *Otherwise* branch below does.
 
 Otherwise, re-run Sections 3 and 4 against the written file and re-emit
 Section 5's report, then compare what it found against what this run has
@@ -1002,6 +1044,16 @@ instead would send a new `Blocker` whose answer is uniquely determined to
 Section 6 with nothing to ask about. A finding whose `Ask` the user has already
 answered is neither: it is settled, it stays settled, and settled means it is
 not put to them again. Restate its recorded outcome and move on.
+
+**A finding this run dispositioned `Reject` is settled on the same terms.** It
+produces no edit, so the re-review detects it again on every later pass, exactly
+as a declined `Ask` does — and a `Reject` you re-dispositioned as an `Ask` would
+be "new" by the rule above and go back to Section 6, putting a question to the
+user about a finding this run already called a false positive, pass after pass
+until the cap fires. Carry the rejections forward the way `ANSWERS` is carried,
+restate the one-line reason, and keep them out of the counts: Section 4 says a
+`Reject` contributes to no severity total, and that holds on a re-emitted report
+too.
 
 Settled covers both answers, and they part on the verdict:
 
@@ -1093,11 +1145,6 @@ a count you cannot read is a count that may already be past 3. Reading an empty
 transcript as "cannot establish" would fail the loop closed on its very first
 pass and apply nothing at all.
 
-```bash
-# The cap is the constant 3. See below for why it takes no override.
-echo "Iteration cap: 3"
-```
-
 The cap is **3, fixed** — lower than the review loop in `finalize.md`, which
 allows 10. Code has CI as an outside judge; a design document does not. Each extra pass is the same context
 re-reading prose it just wrote, and the returns fall off quickly. **The only
@@ -1175,12 +1222,21 @@ is a common case — and there `git diff` prints nothing at all. Check before yo
 print the pointer, and emit whichever line actually shows the change:
 
 ```bash
-# Same rule as the Spec: lookup above — bind the path, never inline it.
+# Same rule as the Spec: lookup above — bind the path, never inline it. And the
+# same root as the staged search and Perspective C: `TARGET_FILE` is relative to
+# the repository root, so from a subdirectory `git ls-files` would miss it and
+# call a tracked document untracked.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+
 IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
 <target file>
 FORGE_TARGET_PATH
 
 if git ls-files --error-unmatch -- "$FORGE_TARGET" >/dev/null 2>&1; then
+  # Both `printf` lines below are user-facing — translate the sentence around
+  # the path to the conversation's language. `git diff --` is a command the
+  # reader pastes: keep it, and the path, byte for byte.
+  #
   # Single-quote the path: this line is a command the reader copies and runs,
   # and the same rule Section 5 puts on the `--fix` hint applies here — an
   # unquoted `docs/my design/foo.md` pastes as two pathspecs and diffs neither.

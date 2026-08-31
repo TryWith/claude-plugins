@@ -40,7 +40,22 @@ case "$MAX_WATCH_ITER" in ''|*[!0-9]*) MAX_WATCH_ITER=24 ;; esac
 [ -z "${FORGE_MAX_WATCH_ITER:-}" ] \
   || [ "$FORGE_MAX_WATCH_ITER" = "$MAX_WATCH_ITER" ] \
   || echo "⚠️ FORGE_MAX_WATCH_ITER='${FORGE_MAX_WATCH_ITER}' is not a positive integer — using $MAX_WATCH_ITER" >&2
-STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
+# Consecutive pending iters before a check is flagged "stuck" (~30 min);
+# override with FORGE_STUCK_THRESHOLD. Same guard as the cap above, and for a
+# worse failure: the consumer is `[ "$count" -eq "$STUCK_THRESHOLD" ]`, so a
+# non-numeric override errors on every iteration and the stuck notification
+# never fires — silently, because the loop has no other symptom. Zero is
+# rejected for the same reason: `count` starts at 1, so `-eq 0` is never true
+# and stuck detection is off. `$((STUCK_THRESHOLD * 5))` in the message below
+# needs a number too.
+STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"
+case "$STUCK_THRESHOLD" in ''|*[!0-9]*) STUCK_THRESHOLD=6 ;; esac
+[ "$STUCK_THRESHOLD" -gt 0 ] 2>/dev/null || STUCK_THRESHOLD=6
+# User-facing: translate it to the conversation's language, keeping the emoji
+# and the variable name as-is.
+[ -z "${FORGE_STUCK_THRESHOLD:-}" ] \
+  || [ "$FORGE_STUCK_THRESHOLD" = "$STUCK_THRESHOLD" ] \
+  || echo "⚠️ FORGE_STUCK_THRESHOLD='${FORGE_STUCK_THRESHOLD}' is not a positive integer — using $STUCK_THRESHOLD" >&2
 
 # Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
 # Stored in files, NOT shell vars / associative arrays: each iteration may run
