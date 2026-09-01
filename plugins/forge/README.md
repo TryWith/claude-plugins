@@ -110,6 +110,13 @@ Messages, notifications, commit message bodies and review replies come back in
 the language of your conversation. Nothing to configure — talk to Claude in
 Japanese and the output is Japanese; in English and it is English.
 
+> **Removed in 1.6:** earlier versions read a `FORGE_LANG` environment variable
+> (`FORGE_LANG=en /forge:finalize`, or `export FORGE_LANG=en`). It is no longer
+> read anywhere, and setting it now does nothing at all. Nothing replaces it —
+> the conversation's language is the answer, and a variable that only restated
+> that was a second place for the same fact. If a shell profile still carries
+> `export FORGE_LANG=…`, the line can go.
+
 > **Not translated:** a handful of strings stay English in every language,
 > because something reads them mechanically rather than a person reading them —
 > Conventional Commits prefixes (`fix:` etc.), all emoji, command and file
@@ -238,6 +245,13 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 メッセージ・通知・コミットメッセージ本文・レビューリプライは、**会話している
 言語で返ります。**設定は不要です。日本語で話しかければ日本語、英語なら英語です。
 
+> **1.6 で撤去:** 以前のバージョンは `FORGE_LANG` 環境変数を読んでいました
+> （`FORGE_LANG=en /forge:finalize`、または `export FORGE_LANG=en`）。現在は
+> どこからも読まれず、設定しても何も起きません。代替はありません — 会話の言語
+> がその答えであり、それを言い直すだけの変数は同じ事実の 2 つ目の置き場でした。
+> シェルの profile に `export FORGE_LANG=…` が残っていれば、その行は削除して
+> 構いません。
+
 > **翻訳されないもの:** 人ではなく機械が読む文字列は、どの言語でも英語のまま
 > です。Conventional Commits の接頭辞（`fix:` など）、すべての絵文字、コマンド名
 > とファイル名、そして各コマンドが自身の出力から読み戻す内部キーが該当します。
@@ -360,6 +374,12 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 
 消息、通知、提交消息正文、评审回复都会以**你对话所用的语言**返回。无需配置：
 用日语交流就输出日语，用英语就输出英语。
+
+> **1.6 中已移除：** 早期版本会读取 `FORGE_LANG` 环境变量
+> （`FORGE_LANG=en /forge:finalize` 或 `export FORGE_LANG=en`）。现在任何地方
+> 都不再读取它，设置了也不会有任何效果。没有替代项——对话所用的语言就是答案，
+> 而只是重述这一点的变量，不过是同一事实的第二个存放处。若 shell profile 中
+> 仍有 `export FORGE_LANG=…`，可以删掉那一行。
 
 > **不翻译的内容：** 由程序而非人读取的字符串，在任何语言下都保持英文：
 > Conventional Commits 前缀（如 `fix:`）、所有表情符号、命令名与文件名，以及

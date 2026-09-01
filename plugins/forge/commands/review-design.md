@@ -62,9 +62,13 @@ treat `--fix` itself as a path.
 
 **Quotes group.** A single- or double-quoted argument is **one** token however
 many spaces it holds, so `/forge:review-design "docs/my design/foo.md" --fix`
-resolves to one path; strip the quotes before using the value. Section 5's rule
-that the `--fix` hint quotes a path containing a space has nothing to lean on
-without this, and would print a hint this section then rejects as two paths.
+resolves to one path; strip the quotes before using the value. Inside a
+double-quoted argument, `\"` is a literal double quote and `\\` a literal
+backslash. That pair is what lets **one** quoting form cover every path,
+including a path holding both quote characters — without it there is a shape
+Section 5 can print and this section cannot decode. Section 5's rule that the
+`--fix` hint quotes the path has nothing to lean on without this, and would
+print a hint this section then rejects as two paths.
 
 Stripping is not the same as ignoring. `--fix` is the **only** flag this
 command accepts, so any other `--`-prefixed token is a typo, and any second
@@ -190,6 +194,18 @@ block they all run — including Stage 3's full-repository walk after Stage 1
 already answered — and their outputs concatenate with nothing to separate them,
 leaving the rule below, which turns on *which stage* a candidate came from,
 nothing to read.
+
+When Stage 3 is issued in the **merged** form Perspective C describes — Section 3
+says to issue it here, so the repository is walked once rather than twice — its
+output also carries the `CLAUDE.md` / `CLAUDE.local.md` hits that the other half
+of the merge is for. **Those are never design-document candidates.** Separate
+them out by filename before applying any rule below, and keep them for
+Perspective C. Without this, a repository that has a root `CLAUDE.md` and no
+design documents at all gets `./CLAUDE.md` as its only Stage 3 line, *stop at
+the first stage that prints any line* takes it as the candidate, and the "every
+stage came up empty" branch below — the one that tells the user to pass an
+explicit path — never fires. The user is offered their conventions file as the
+document to review.
 
 `*design*` and `*plan*` are a wide net: they match any path that merely
 contains the word, this command's own file included. **Never take a candidate
@@ -322,6 +338,23 @@ FORGE_TARGET_PATH
 # `|| true` — a plan with no Spec: line is a fall-through, not a failed block.
 grep -m1 '^\*\*Spec:\*\*' -- "$FORGE_TARGET" || true
 ```
+
+**Normalise the value before treating it as a path.** The `Spec:` line is
+markdown, so what follows the prefix carries decoration: strip `**Spec:** `,
+then surrounding backticks, and unwrap a markdown link — `[text](path)` yields
+`path`. `writing-plans` fixes no single form, and the backticked one is
+ordinary: this repository's own plan reads ``**Spec:** `docs/superpowers/specs/…-design.md` ``,
+and a check that keeps the backticks reports it missing. Skipping this step
+turns a well-formed plan into the "no companion spec" `Major` — which a
+report-only run can never clear, so the plan is pinned at `NOT READY` with
+nothing it could say to fix it.
+
+The normalised path is resolved **relative to the repository root**, like every
+other path here. A `Spec:` line written relative to the plan's own directory
+(`../specs/foo.md`) therefore will not resolve: treat that as the step-1 miss it
+is, fall through, and record a Perspective C finding quoting the form that was
+found — the line is not wrong, it is written against a different base than this
+command reads.
 
 Check that the path the `Spec:` line names actually exists before accepting it.
 That path came out of the document, so it is untrusted: bind it with the same
@@ -816,17 +849,18 @@ Rules for the header block:
 - The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
   verbatim. A bare `/forge:review-design --fix` re-runs the staged search and
   can land on a different document than the one this report is about. Wrap the
-  path in double quotes in the hint when it contains a space or any other shell
-  metacharacter — Section 1 treats a second remaining token as a second path
-  and stops, so an unquoted `docs/my design/foo.md` prints a hint that is an
-  error when the reader runs it. Section 1 groups on single quotes too, so a
-  path containing a `"` takes single quotes instead; one containing both takes
-  single quotes with each `'` escaped as `'\''`, which covers every path and
-  leaves no carve-out. Section 8's `git diff` pointer escapes the same way, and
-  there it is load-bearing — that line is pasted into a **shell**, so a path
-  printed bare puts `$(...)` in unquoted context. This hint is typed into
-  Claude, not a shell, so the stake here is only that the hint parses; the two
-  rules keep the same shape so a reader holds one convention, not two
+  path in **double quotes**, escaping any `"` in it as `\"` and any `\` as
+  `\\` — Section 1 decodes exactly that, so one form covers every path with no
+  carve-out left to reach. An unquoted `docs/my design/foo.md` is two tokens,
+  and Section 1 treats a second remaining token as a second path and stops, so
+  the hint would be an error the moment the reader runs it.
+
+  Do **not** borrow Section 8's `'\''` escaping for this line. That is POSIX
+  shell syntax, correct for the `git diff` pointer because a reader pastes that
+  into a **shell**; Section 1's parser has no rule for it, so a hint escaped
+  that way does not survive being typed back in. The two lines go to different
+  readers, so they take different quoting — matching their shapes to each other
+  is what breaks one of them
 - **The hint is printed only when `FIX_MODE` is `0` and the report carries at
   least one `Fix now` or `Ask`.** A run that is already applying fixes must not
   tell the reader to pass `--fix`, and neither must a report with nothing for a
@@ -1233,8 +1267,13 @@ Applied:
   • §7    added a test strategy section
   • §6.3  unified "job" / "task" terminology
 
-Review the changes with: git diff -- <target file>
+Review the changes with: git diff -- '<target file>'
 ```
+
+The pointer line is shown with the path already single-quoted, which is the
+shape the block below emits. **That block is authoritative** — it also escapes
+any `'` inside the path, which no fixed example can show. Never copy an
+unquoted pointer into a real report.
 
 The example continues the abridged report in Section 5, so its `Applied:` list
 is abridged the same way — it shows four of the changes, not all of them, which
