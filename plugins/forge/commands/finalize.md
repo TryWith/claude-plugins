@@ -6,24 +6,7 @@ description: Run the full post-implementation workflow — commit, push, PR, cod
 
 Run the full post-implementation workflow. Do **not** advance to the next step until the current one fully completes.
 
-## Step 0: Determine output language
-
-Resolve the user's preferred output language and use it consistently for the
-rest of the command. See the **Language preamble & i18n contract** section of
-`watch.md` for the full priority rules (env var → Claude conversation language
-→ user message language → `ja` default), translation scope, and override
-options.
-
-```bash
-LANG_CODE="${FORGE_LANG:-ja}"
-echo "🌐 Language: $LANG_CODE"
-```
-
-All subsequent user-facing output (logs, notifications, commit message bodies,
-review replies, progress reports) must be translated to `$LANG_CODE` at
-runtime.
-
-## Step 0.5: Pre-flight — verify required dependencies
+## Step 0: Pre-flight — verify required dependencies
 
 Before invoking any external slash command, verify that the skills it needs are
 loaded in the current Claude Code session, split by **when** they are needed:
@@ -62,7 +45,7 @@ missing with the install hints from the table above, then abort:
 Install/enable the missing items, run /reload-plugins, then re-invoke /forge:finalize.
 ```
 
-(Translate the message above to `$LANG_CODE`; keep the slash command names
+(Translate the message above to the conversation's language; keep the slash command names
 and install hints as-is — they are proper nouns.)
 
 A missing `/security-review` does **not** block startup — it is invoked only
@@ -162,7 +145,21 @@ REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/fo
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
+# Override with FORGE_MAX_REVIEW_LOOP. Only a positive integer is taken, and
+# the rejected shapes fail two different ways: a non-numeric override makes
+# 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]` error, and a failed
+# comparison returns non-zero — the cap would never fire; a zero-valued one
+# makes that same test true on the first pass, so no review ever starts. The
+# `case` rejects the first, `-ge`'s companion test `-gt 0` the second, and that
+# test also catches an integer too large for `[` to parse.
+#
+# Do NOT fold the zero test into the `case` as a `0*` arm. A leading zero is
+# **not** read as octal here: `[` parses base 10, so `[ 010 -ge 8 ]` is true.
+# Octal belongs to arithmetic expansion (`$((010))` is 8), a different context.
+# A `0*` arm rejects `010`, which works, and still would not cover `00`.
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
+case "$MAX_REVIEW_LOOP" in *[!0-9]*) MAX_REVIEW_LOOP=10 ;; esac
+[ "$MAX_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_REVIEW_LOOP=10
 REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
 REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
 # Working buffers. The durable home for deferred findings is the PR comment
@@ -193,6 +190,14 @@ forge_snapshot() {
 FORGE_ENV
 
 . "$REVIEW_ENV_FILE"
+# Say so out loud when an explicit override was rejected — silence leaves the
+# user reading the clamped runs as the variable being ignored outright. Emitted
+# here, once, rather than inside the env file: that file is sourced by every
+# later Step 2 block and would repeat the warning on each one.
+# User-facing: translate it, keeping the emoji and the variable name as-is.
+[ -z "${FORGE_MAX_REVIEW_LOOP:-}" ] \
+  || [ "$FORGE_MAX_REVIEW_LOOP" = "$MAX_REVIEW_LOOP" ] \
+  || echo "⚠️ FORGE_MAX_REVIEW_LOOP='${FORGE_MAX_REVIEW_LOOP}' is not a positive integer — using $MAX_REVIEW_LOOP" >&2
 echo 0 > "$REVIEW_LOOP_FILE"
 ```
 
@@ -250,7 +255,7 @@ Branch on what comes back:
   🔭 Step 2: code review running automatically — PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>
   ```
 
-  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+  (Translate to the conversation's language; keep the command name and emoji as-is.)
 
 - **Model invocation is declined** — the tool result refuses on
   invocation-policy grounds (e.g. a `disable-model-invocation` rejection) and
@@ -272,7 +277,7 @@ Branch on what comes back:
   ⚠️ Step 2 skipped — /code-review is not available in this session (not found or disabled).
   ```
 
-  (Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+  (Translate to the conversation's language; keep the command name and emoji as-is.)
 
 - **Anything else goes wrong** — a transient tool error, a launch failure →
   fall back to the manual prompt for *this* iteration only. Do **not** set
@@ -290,7 +295,7 @@ I'll pick the workflow back up automatically once it finishes.
 (PR #<PR_NUMBER> · iteration <REVIEW_LOOP>/<MAX_REVIEW_LOOP>)
 ```
 
-(Translate to `$LANG_CODE`; keep the command name and emoji as-is.)
+(Translate to the conversation's language; keep the command name and emoji as-is.)
 
 **Waiting for completion.** `/code-review --fix` usually runs as a **background
 subagent** that hands control back to the conversation before it has finished.
@@ -390,6 +395,12 @@ Give **every** unapplied finding exactly one outcome, in writing:
   command. Record it — deferring is not dropping.
 - **Reject** — wrong, or a false positive. One line of reason.
 
+`Fix now`, `Defer` and `Reject` are the keys this triage is read back on: the
+*stays classified* rule below names `Defer` and `Reject` by word, 2-3's outcome
+table and 2-7's exit conditions both turn on "nothing came out as *Fix now*",
+and a finding you classified keeps that word across every later iteration. They
+stay English however the finding beside them is written.
+
 Default to the reviewer's judgment. Override it to **Fix now** only for the two
 categories named above; "it would read a bit nicer" is a **Defer**. Silently
 agreeing with a skip is not an outcome — each finding gets one of the three.
@@ -483,7 +494,7 @@ staged change with `git diff --cached` (i.e. after staging, before
 commit body distinguishes the review's fixes from your triage. Never invent a
 summary.
 
-> Note: the commit subject prefix (`fix:` etc.) stays in English regardless of `$LANG_CODE` — Conventional Commits is language-neutral. Translate only the body.
+> Note: the commit subject prefix (`fix:` etc.) stays in English regardless of the conversation's language — Conventional Commits is language-neutral. Translate only the body.
 
 ### 2-6. Re-review
 
@@ -555,7 +566,7 @@ PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
 # The marker is a machine key, NOT a user-facing string: it must stay byte-for-
 # byte identical across runs and languages or the next run cannot find this
 # comment and posts a duplicate. Never translate it. The heading on the next
-# line *is* user-facing — translate it to $LANG_CODE, emoji unchanged.
+# line *is* user-facing — translate it to the conversation's language, emoji unchanged.
 MARKER='<!-- forge:deferred-findings -->'
 BODY="$MARKER"$'\n'"### ⏳ Deferred code-review findings"$'\n\n'"$(
   while IFS=$'\t' read -r loc summary; do
@@ -585,14 +596,14 @@ esac
 echo "$COMMENT_URL"   # Step 4 restates this link — keep it
 ```
 
-Also tell the user directly, in `$LANG_CODE` — a comment they have to go looking
+Also tell the user directly, in the conversation's language — a comment they have to go looking
 for is not a report:
 
 ```
 ⏳ Step 2 deferred <N> finding(s) — posted to PR #<PR_NUMBER> for review.
 ```
 
-(Translate to `$LANG_CODE`; keep the emoji and the PR reference as-is.)
+(Translate to the conversation's language; keep the emoji and the PR reference as-is.)
 
 Carry the count **and the `$COMMENT_URL` the block printed** forward yourself —
 like `REVIEW_MODE`, they are values you hold in the conversation, not files (2-9
@@ -668,7 +679,7 @@ explicitly, and proceed to Step 4:
 🔒 Security review skipped — the diff touches no security-relevant surface (<one-line reason>).
 ```
 
-(Translate the message to `$LANG_CODE`; keep the emoji and command names as-is.)
+(Translate the message to the conversation's language; keep the emoji and command names as-is.)
 
 ### 3-2. Run the security review
 
@@ -716,7 +727,7 @@ MAX_SEC_LOOP=5
 # At the start of each security iteration: SEC_LOOP=$((SEC_LOOP + 1)) and check the cap
 ```
 
-(Subject prefix `fix:` stays English; translate only the body to `$LANG_CODE`.)
+(Subject prefix `fix:` stays English; translate only the body to the conversation's language.)
 
 #### Medium / Low → defer to human
 
@@ -733,7 +744,7 @@ Fix now, defer to a follow-up, or accept the risk?
 (Any Critical/High findings were already auto-fixed above.)
 ```
 
-(Translate to `$LANG_CODE`; keep emoji, severity labels, file paths, and command
+(Translate to the conversation's language; keep emoji, severity labels, file paths, and command
 names as-is.) Ask the user how to proceed and act on their answer. Once
 Critical / High are cleared and Medium / Low have been surfaced (and handled per
 the user's choice), proceed to **Step 4**.
@@ -750,7 +761,8 @@ Invoke the slash command:
 consecutive all-clear checks; watches CI / open review threads / Changes
 Requested) and, on exit, emits the completion notification (macOS desktop
 notification + final terminal summary). Success and aborted outcomes produce
-different notifications — see `watch.md` Section 3 for details.
+different notifications — see `watch.md`'s **Completion notification** section
+for details.
 
 If Step 2 deferred any findings (2-8), restate the count and the PR comment link
 alongside that summary. `/forge:watch` reports on CI and reviews only; it knows

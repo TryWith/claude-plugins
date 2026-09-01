@@ -19,11 +19,45 @@ jq -e . .claude-plugin/marketplace.json
 jq -e . plugins/<name>/.claude-plugin/plugin.json
 ```
 
-Local end-to-end install before pushing:
+### Loading a change you just made
+
+There is no build step, but there are **three copies** of every command file, and
+editing the first does not update the third:
+
+1. this repository — where you edit
+2. `~/.claude/plugins/marketplaces/trywith/` — a git clone of the GitHub repo
+3. `~/.claude/plugins/cache/trywith/forge/<version>/` — **what Claude Code actually reads**
+
+The cache is keyed on the `version` in `plugin.json`. While that string is
+unchanged, neither syncing the clone nor `/reload-plugins` replaces the cached
+copy — Claude Code keeps serving the build that first populated that version's
+directory. A whole afternoon of "verification" can run against a stale command
+without a single error appearing.
+
+To test an edit end to end, **bump `version` in `plugins/forge/.claude-plugin/plugin.json`**,
+then `/reload-plugins`. Confirm what is actually loaded before trusting a result:
 
 ```bash
-/plugin install ./plugins/forge
+diff plugins/forge/commands/review-design.md \
+     ~/.claude/plugins/cache/trywith/forge/$(jq -r .version plugins/forge/.claude-plugin/plugin.json)/commands/review-design.md
 ```
+
+Note that `/plugin install ./plugins/forge` does **not** work — that command
+takes a marketplace, not a plugin directory, and reports
+`Marketplace "./plugins/forge" not found`.
+
+Also note that the clone in step 2 is updated by **git**, not by copying files
+into it. An edit only reaches the cache once it is committed and the clone has
+fetched it, so a live test of an uncommitted change tests nothing.
+
+**Bump the version when you are about to test, not on every commit.** The rule
+above exists so a *live invocation* loads fresh code; it is not a per-commit
+obligation. A review loop that bumps on each of its own fix commits walks the
+version several patch releases in an afternoon, leaves a cache directory behind
+for each one, and makes every document that records the target version stale
+again. Batch it: leave the version alone while iterating, and bump once before
+the run you intend to verify, and once more before merge if anything changed
+after that.
 
 ## Non-obvious conventions
 
@@ -31,15 +65,14 @@ Local end-to-end install before pushing:
 
 `finalize.md`, `watch.md`, etc. are read **by Claude as instructions**. The shell snippets inside (`gh ...`, `git ...`) are templates Claude executes and may adapt — substituting variables, translating strings, etc. They are not raw bash scripts.
 
-### i18n: English source, runtime translation
+### i18n: English source, conversation-language output
 
-All command files are written in English as the **source language**. At execution time, Claude resolves `$LANG_CODE` per the **Language preamble & i18n contract** section at the top of `plugins/forge/commands/watch.md` (priority: `FORGE_LANG` env var → Claude conversation language → `ja` default) and translates every user-facing string before emitting it. `finalize.md` Step 0 inlines the short preamble snippet but defers to `watch.md` for the full contract.
+All command files are written in English as the **source language**. At execution time Claude writes to the user in the language of the conversation. That is its default behaviour — there is no resolution step, no env var, and no translation table.
 
 When editing command files:
 - Keep prose and template strings in English
-- Do **not** hard-code Japanese / other-language strings into command files — they belong only in the bilingual README
-- **Not translated** (intentionally): Conventional Commits prefixes (`fix:`, `feat:`) and status emoji (🔭 ✅ ⚠️ 🎉 ⏳ ❌). These are shared across all languages.
-- Default user-facing output is Japanese (`ja`), since the primary audience is internal TryWith users.
+- Do **not** hard-code Japanese / other-language strings into command files — they belong only in the trilingual README
+- Where a string is **read by something rather than by a person** — a `grep` in a hook, a Conventional Commits parser, a marker the command finds its own PR comment by, a literal it reads back out of its own output — say so **where that string is defined**, and say what reads it. Claude keeps it verbatim because it is an identifier, not because a list told it to. A separate "do not translate" table is a copy of that fact, and copies drift: every i18n defect in this plugin's history was a table that had fallen behind the thing it described.
 
 ### Two-level command composition
 

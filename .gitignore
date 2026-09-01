@@ -3,3 +3,6 @@
 node_modules/
 .env
 .env.local
+
+# superpowers-generated design documents (spec / plan) are not committed
+docs/superpowers/

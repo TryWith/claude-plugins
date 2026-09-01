@@ -6,7 +6,7 @@
 
 ## English
 
-A Claude Code plugin that orchestrates existing developer commands and takes a PR all the way from creation through CI / review monitoring to auto-fix.
+A Claude Code plugin that reviews your design document before implementation, then orchestrates existing developer commands and takes a PR all the way from creation through CI / review monitoring to auto-fix.
 
 ### Install
 
@@ -32,6 +32,14 @@ The following commands must be available before use:
 > review iteration — then resumes automatically. If the command is not available
 > at all (not found or disabled), Step 2 is skipped with a warning. In every case
 > nothing else in the workflow changes.
+
+> **About `/forge:review-design`:** it needs none of the commands above — it
+> only reads a markdown file (and, with `--fix`, edits that same file), so it
+> runs on a bare Claude Code install. The
+> `superpowers` plugin is optional and only shapes the two ends of the flow: it
+> produces the spec and plan the review reads, and supplies the
+> `superpowers:subagent-driven-development` / `superpowers:executing-plans`
+> skills a `READY` plan is handed off to.
 
 ### Usage
 
@@ -59,41 +67,75 @@ It will then:
 |---------|---------|
 | `/forge:finalize` | Full workflow |
 | `/forge:watch` | PR watch loop only |
+| `/forge:review-design` | Review a superpowers spec or plan before implementation |
 
-### Multilingual output
+`/forge:review-design` reads a design document produced by
+`superpowers:brainstorming` (a spec) or `superpowers:writing-plans` (a plan)
+and reports whether it is ready to implement. It checks ten perspectives —
+completeness, internal consistency, grounding against this repository, blind
+spots, buildability, scope, assumptions, alternatives, YAGNI, and acceptance
+criteria — and reports `READY` only when no `Blocker`, no `Major` and no
+unresolved `Ask` remain.
 
-Output messages, notifications, commit message bodies, and review replies are translated to the user's preferred language.
-
-#### Language resolution order
-
-1. `FORGE_LANG` env var (e.g. `ja`, `en`, `zh-CN`, `ko`)
-2. Claude Code conversation language setting
-3. Default: `ja` (Japanese)
-
-#### Usage
+By default it is report-only and changes nothing, which makes it safe to run
+from a hook or CI — pass an explicit, self-typing path (under `specs/` or
+`plans/`, or ending in `-design.md`, but not carrying both components) for a
+fully unattended run, since without one it may still ask which document to
+review or what type it is. Pass `--fix`
+to have it put the design decisions to you as
+multiple-choice questions and then apply the answers — findings with a
+uniquely determined answer (`Fix now`) are applied without being asked. Under
+`--fix` the document is re-reviewed after each round of changes, up to 3 rounds.
 
 ```bash
-# Run once in English
-FORGE_LANG=en /forge:finalize
+# Report on the newest design document. In the standard superpowers layout a
+# feature's spec and plan share a date, so this normally asks which one you mean.
+/forge:review-design
 
-# Set for the whole shell
-export FORGE_LANG=en
-/forge:finalize
+# Review a specific file and apply fixes
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
 ```
 
-#### Verified languages
+Typical flow with superpowers:
 
-| Code | Language | Status |
-|------|----------|--------|
-| `ja` | Japanese | ✅ Default |
-| `en` | English | ✅ Source language |
-| Others (BCP 47) | — | Works if Claude can translate; naturalness not guaranteed |
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  implementation
+```
 
-See the **Language preamble & i18n contract** section at the top of [`commands/watch.md`](./commands/watch.md) for the full spec.
+### Output language
 
-> **Not translated:** Conventional Commits prefixes (`fix:` etc.) and all emoji stay shared across all languages.
+Messages, notifications, commit message bodies and review replies come back in
+the language of your conversation. Nothing to configure — talk to Claude in
+Japanese and the output is Japanese; in English and it is English.
+
+> **Removed in 1.6:** earlier versions read a `FORGE_LANG` environment variable
+> (`FORGE_LANG=en /forge:finalize`, or `export FORGE_LANG=en`). It is no longer
+> read anywhere, and setting it now does nothing at all. Nothing replaces it —
+> the conversation's language is the answer, and a variable that only restated
+> that was a second place for the same fact. If a shell profile still carries
+> `export FORGE_LANG=…`, the line can go.
+
+> **Not translated:** a handful of strings stay English in every language,
+> because something reads them mechanically rather than a person reading them —
+> Conventional Commits prefixes (`fix:` etc.), all emoji, command and file
+> names, and the internal keys each command reads back out of its own
+> output. A CI gate greps `/forge:review-design`'s output for `Verdict:`
+> and `NOT READY`; translating those would break it.
+>
+> This is deliberately not a list. Every such string is marked where it is
+> defined in the command file, alongside what reads it — a roster kept here as
+> well would be a second copy, and a copy of a fact like this drifts out of date
+> the first time a key is added.
 
 ### Requirements
+
+`/forge:review-design` needs one thing: a **git repository**. It resolves every
+path from the repository root, so it has to be run inside one — nothing else on
+this list applies to it.
+
+`/forge:finalize` and `/forge:watch` additionally need:
 
 - `gh` CLI installed and authenticated
 - macOS (for the notification feature)
@@ -104,7 +146,7 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 
 ## 日本語
 
-既存の開発系コマンドをオーケストレーションし、PR作成後のCI・レビュー監視・自動修正までを完遂する Claude Code プラグイン。
+実装前の設計書レビューに加え、既存の開発系コマンドをオーケストレーションし、PR作成後のCI・レビュー監視・自動修正までを完遂する Claude Code プラグイン。
 
 ### インストール
 
@@ -129,6 +171,14 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 > 停止して `/code-review --fix` の入力を促し（レビュー1周ごとに1回）、完了後は
 > 自動で再開する。コマンド自体が利用できない場合（未検出・無効化）は警告を出して
 > Step 2 をスキップする。いずれの場合もそれ以外の挙動は変わらない。
+
+> **`/forge:review-design` について:** 上記の依存コマンドはいずれも不要で、
+> Markdown ファイルを読む（`--fix` 時はその同じファイルを書き換える）だけなので
+> 素の Claude Code でも動作する。
+> `superpowers` プラグインは任意で、フローの両端にのみ関わる。レビュー対象の
+> 設計書・実装計画を生成するのは `superpowers` 側であり、`READY` と判定された
+> 実装計画の受け渡し先となる `superpowers:subagent-driven-development` /
+> `superpowers:executing-plans` を提供するのも `superpowers` 側である。
 
 ### 使い方
 
@@ -156,41 +206,69 @@ See the **Language preamble & i18n contract** section at the top of [`commands/w
 |---------|------|
 | `/forge:finalize` | フルワークフロー |
 | `/forge:watch` | PR監視ループのみ |
+| `/forge:review-design` | 実装前に superpowers の設計書・実装計画をレビュー |
 
-### 多言語出力
+`/forge:review-design` は `superpowers:brainstorming` が生成した設計書（spec）
+または `superpowers:writing-plans` が生成した実装計画（plan）を読み、実装に
+進んでよいかを判定します。完全性・内部整合性・リポジトリとの整合・抜け観点・
+実装可能性・スコープ・前提の根拠・代替案の痕跡・YAGNI・受け入れ条件の10観点を
+確認し、`Blocker` と `Major` と未解決の `Ask` がすべて 0 のときだけ `READY` と
+判定します。
 
-出力メッセージ・通知・コミットメッセージ本文・レビューリプライは、ユーザーの言語設定に応じて翻訳されます。
-
-#### 言語決定の優先順位
-
-1. 環境変数 `FORGE_LANG`（例: `ja`, `en`, `zh-CN`, `ko`）
-2. Claude Code の会話言語設定
-3. デフォルト: `ja`（日本語）
-
-#### 使い方
+既定ではレポートのみでファイルを変更しないため、フックや CI から安全に実行
+できます。完全に無人で実行するには、種別が一意に定まるパス（`specs/` または
+`plans/` 配下、もしくは `-design.md` で終わるファイル名。ただし両方を含むパスは
+除く）を明示的に渡してください。
+渡さない場合、対象文書やその種別を質問することがあります。`--fix` を付けると設計判断を選択式で質問し、回答を反映します。回答が
+一意に定まる指摘（`Fix now`）は質問せずそのまま適用されます。`--fix` 時は変更の
+たびに再レビューし、最大 3 周まで繰り返します。
 
 ```bash
-# 一時的に英語で実行
-FORGE_LANG=en /forge:finalize
+# 最新の設計書をレポート。superpowers の標準構成では同じ機能の spec と plan が
+# 同じ日付になるため、通常はどちらを見るか質問されます。
+/forge:review-design
 
-# シェル全体で英語に
-export FORGE_LANG=en
-/forge:finalize
+# ファイルを指定して修正まで実行
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
 ```
 
-#### 検証済み言語
+superpowers と組み合わせた典型的な流れ:
 
-| コード | 言語 | 状態 |
-|--------|------|------|
-| `ja` | 日本語 | ✅ デフォルト |
-| `en` | English | ✅ ソース言語 |
-| その他 (BCP 47) | — | Claude が翻訳可能なら対応（自然さは保証されない） |
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  実装
+```
 
-詳細は [`commands/watch.md`](./commands/watch.md) 冒頭の **Language preamble & i18n contract** セクションを参照。
+### 出力言語
 
-> **対象外:** Conventional Commits プレフィックス（`fix:` 等）とすべての絵文字は全言語共通で維持されます。
+メッセージ・通知・コミットメッセージ本文・レビューリプライは、**会話している
+言語で返ります。**設定は不要です。日本語で話しかければ日本語、英語なら英語です。
+
+> **1.6 で撤去:** 以前のバージョンは `FORGE_LANG` 環境変数を読んでいました
+> （`FORGE_LANG=en /forge:finalize`、または `export FORGE_LANG=en`）。現在は
+> どこからも読まれず、設定しても何も起きません。代替はありません — 会話の言語
+> がその答えであり、それを言い直すだけの変数は同じ事実の 2 つ目の置き場でした。
+> シェルの profile に `export FORGE_LANG=…` が残っていれば、その行は削除して
+> 構いません。
+
+> **翻訳されないもの:** 人ではなく機械が読む文字列は、どの言語でも英語のまま
+> です。Conventional Commits の接頭辞（`fix:` など）、すべての絵文字、コマンド名
+> とファイル名、そして各コマンドが自身の出力から読み戻す内部キーが該当します。
+> CI のゲートは `/forge:review-design` の出力を `Verdict:` や `NOT READY` で
+> grep するため、これらを翻訳すると壊れます。
+>
+> ここに一覧は置きません。該当する文字列はすべて、コマンドファイル内の定義箇所
+> に「何がそれを読むのか」と併せて明記してあります。ここにも一覧を置くとそれは
+> 二つ目の複製になり、キーが増えた最初の一回で古くなります。
 
 ### 前提条件
+
+`/forge:review-design` に必要なのは **git リポジトリ** だけです。全てのパスを
+リポジトリルート基準で解決するため、リポジトリ内で実行してください。以下の
+項目はいずれもこのコマンドには不要です。
+
+`/forge:finalize` と `/forge:watch` には加えて以下が必要です:
 
 - `gh` CLI がインストール・認証済み
 - macOS（通知機能を利用する場合）
@@ -201,7 +279,7 @@ export FORGE_LANG=en
 
 ## 中文
 
-将既有开发命令编排起来，从 PR 创建到 CI / 评审监控直至自动修复一并完成的 Claude Code 插件。
+在实现前评审设计文档，并将既有开发命令编排起来，从 PR 创建到 CI / 评审监控直至自动修复一并完成的 Claude Code 插件。
 
 ### 安装
 
@@ -225,6 +303,13 @@ export FORGE_LANG=en
 > 仅当被拒绝时才暂停并提示你输入 `/code-review --fix`（每轮评审各一次），完成后
 > 自动恢复流程。若该命令根本不可用（未找到或已禁用），则发出警告并跳过 Step 2。
 > 上述任一情况下其余步骤均不变。
+
+> **关于 `/forge:review-design`:** 它不需要上述任何依赖命令——只读取一个
+> Markdown 文件（使用 `--fix` 时改写同一个文件），因此在原生 Claude Code 上
+> 即可运行。`superpowers` 插件是可选的，
+> 只涉及流程的两端：它生成供本命令评审的设计文档与实现计划，并提供判定为
+> `READY` 的实现计划所交接到的 `superpowers:subagent-driven-development` /
+> `superpowers:executing-plans` 技能。
 
 ### 使用方法
 
@@ -252,41 +337,64 @@ export FORGE_LANG=en
 |------|------|
 | `/forge:finalize` | 完整工作流 |
 | `/forge:watch` | 仅 PR 监控循环 |
+| `/forge:review-design` | 实现前审查 superpowers 的设计文档与实现计划 |
 
-### 多语言输出
+`/forge:review-design` 读取由 `superpowers:brainstorming` 生成的设计文档
+（spec）或由 `superpowers:writing-plans` 生成的实现计划（plan），判断是否
+可以进入实现阶段。它检查十个方面——完整性、内部一致性、与本仓库的一致性、
+遗漏视角、可实现性、范围、前提依据、备选方案记录、YAGNI、验收条件——仅当
+`Blocker`、`Major` 和未解决的 `Ask` 全部为 0 时才判定为 `READY`。
 
-输出消息、通知、提交消息正文、评审回复将根据用户的语言设置进行翻译。
-
-#### 语言决定优先级
-
-1. 环境变量 `FORGE_LANG`（例：`ja`, `en`, `zh-CN`, `ko`）
-2. Claude Code 会话语言设置
-3. 默认：`ja`（日语）
-
-#### 使用示例
+默认仅输出报告、不修改文件，因此可以安全地从 hook 或 CI 调用。若要完全无人值守地运行，
+请显式传入类型可自行判定的路径（位于 `specs/` 或 `plans/` 下，或文件名以
+`-design.md` 结尾，但不可同时包含两者）；否则它仍可能询问要审查哪份文档、
+或它属于哪种类型。加上 `--fix`
+后，它会以选择题形式询问设计决策并应用你的回答；其中答案唯一确定的发现
+（`Fix now`）会直接应用，无需询问。使用 `--fix` 时，每轮修改后都会重新审查，
+最多 3 轮。
 
 ```bash
-# 临时以英语运行
-FORGE_LANG=en /forge:finalize
+# 报告最新的设计文档。在 superpowers 的标准布局中，同一功能的 spec 与 plan
+# 日期相同，因此通常会询问你指的是哪一个。
+/forge:review-design
 
-# 整个 shell 切换为英语
-export FORGE_LANG=en
-/forge:finalize
+# 指定文件并应用修复
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
 ```
 
-#### 已验证语言
+与 superpowers 配合的典型流程：
 
-| 代码 | 语言 | 状态 |
-|------|------|------|
-| `ja` | 日语 | ✅ 默认 |
-| `en` | 英语 | ✅ 源语言 |
-| 其他 (BCP 47) | — | 若 Claude 可翻译则支持（不保证自然度） |
+```
+superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-plans
+                                                    →  /forge:review-design
+                                                    →  实现
+```
 
-详情请参阅 [`commands/watch.md`](./commands/watch.md) 顶部的 **Language preamble & i18n contract** 章节。
+### 输出语言
 
-> **不翻译:** Conventional Commits 前缀（如 `fix:`）与所有表情符号在所有语言中保持一致。
+消息、通知、提交消息正文、评审回复都会以**你对话所用的语言**返回。无需配置：
+用日语交流就输出日语，用英语就输出英语。
+
+> **1.6 中已移除：** 早期版本会读取 `FORGE_LANG` 环境变量
+> （`FORGE_LANG=en /forge:finalize` 或 `export FORGE_LANG=en`）。现在任何地方
+> 都不再读取它，设置了也不会有任何效果。没有替代项——对话所用的语言就是答案，
+> 而只是重述这一点的变量，不过是同一事实的第二个存放处。若 shell profile 中
+> 仍有 `export FORGE_LANG=…`，可以删掉那一行。
+
+> **不翻译的内容：** 由程序而非人读取的字符串，在任何语言下都保持英文：
+> Conventional Commits 前缀（如 `fix:`）、所有表情符号、命令名与文件名，以及
+> 各命令从自身输出中读回的内部键。CI 门禁会在 `/forge:review-design` 的输出中
+> grep `Verdict:` 和 `NOT READY`，翻译后就会失效。
+>
+> 这里刻意不列清单。每个这样的字符串都在命令文件的定义处标注，并注明是什么在
+> 读取它；在这里再列一份就成了第二个副本，而这类副本在新增一个键时就会过时。
 
 ### 前提条件
+
+`/forge:review-design` 只需要一件事：一个 **git 仓库**。它从仓库根目录解析
+所有路径，因此必须在仓库内运行；下面列出的其余项均与它无关。
+
+`/forge:finalize` 与 `/forge:watch` 则额外需要：
 
 - 已安装并完成认证的 `gh` CLI
 - macOS（如需使用通知功能）

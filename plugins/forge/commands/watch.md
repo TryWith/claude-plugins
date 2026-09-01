@@ -15,101 +15,7 @@ running `/forge:finalize` instead.
 
 ---
 
-## Section 1: Language preamble & i18n contract
-
-This section serves a dual purpose:
-
-1. **Runtime preamble** — the shell snippet Claude runs at the start of every
-   Forge command to resolve `$LANG_CODE`.
-2. **i18n contract** — the canonical specification for what gets translated,
-   how language is resolved, what stays in source form, and how to override.
-
-### Runtime preamble
-
-Resolve the user's preferred output language and use it consistently for the
-rest of the command.
-
-```bash
-LANG_CODE="${FORGE_LANG:-ja}"
-echo "🌐 Language: $LANG_CODE"
-```
-
-All subsequent user-facing output (logs, notifications, commit message bodies,
-review replies, progress reports) must be translated to `$LANG_CODE` at
-runtime. The English strings throughout this file are source templates, not
-literal output.
-
-### Language resolution
-
-The shell snippet above only handles the env var and the `ja` default
-mechanically. Steps 2 and 3 below are Claude's runtime decisions (LLM
-behavior), not encoded in shell. Priority order (highest first):
-
-1. The `FORGE_LANG` environment variable (e.g. `ja`, `en`, `zh-CN`, `ko`,
-   `fr`, `de` — BCP 47 form)
-2. Claude Code's conversation language setting (CLAUDE.md / settings Language
-   directive, etc.)
-3. The language of the user's most recent message
-4. Default: `ja` (Japanese)
-
-### Translation scope
-
-| Item | Translate? | Example |
-|------|-----------|---------|
-| Shell `echo` messages | ✅ | "Watching started" → "監視開始" |
-| `osascript` notification title and body | ✅ | "All checks passed!" → "全チェッククリア!" |
-| Final summary report labels | ✅ | "CI checks" → "CI チェック" |
-| Commit message **body** | ✅ | "address self-review findings" → "自己レビュー指摘事項の修正" |
-| Replies to review comments | ✅ | "Addressed." → "対応しました。" |
-| Progress updates to the user | ✅ | All of Claude's natural-language replies |
-| Conventional Commits prefix | ❌ | `fix:`, `feat:` stay in English |
-| Emoji | ❌ | All emoji are language-neutral and shared across every language |
-| File and command names | ❌ | `/forge:finalize` etc. are proper nouns |
-| Placeholders in templates | ❌ | `{pr_number}`, `{repo}` are substituted, not translated |
-
-### Translation policy
-
-- The English strings inside each command file are **source templates**, not
-  literal output.
-- Claude generates the natural-language translation for `$LANG_CODE` at
-  runtime.
-- Within a single session, do **not** mix languages — stick with the language
-  resolved at start.
-- If a non-supported language is requested, fall back to `en`.
-
-### Supported languages
-
-Officially verified:
-
-- `ja` — Japanese (default)
-- `en` — English (source language)
-
-Other languages (e.g. `zh-CN`, `ko`, `fr`, `de`) work whenever Claude can
-translate to them, but naturalness is not guaranteed.
-
-### How to check or override
-
-```bash
-# Inspect current setting
-echo "FORGE_LANG: ${FORGE_LANG:-(unset)}"
-
-# Force a language for a single invocation
-FORGE_LANG=en /forge:finalize
-
-# Persist for the shell session
-export FORGE_LANG=en
-/forge:finalize
-```
-
-### Future extension: static message catalog
-
-The current design relies on Claude's runtime translation. If output
-consistency or QA becomes a concern, a static catalog
-(e.g. `commands/messages/{lang}.json`) can be introduced later.
-
----
-
-## Section 2: Watch loop
+## Watch loop
 
 ### Initialization
 
@@ -117,10 +23,60 @@ consistency or QA becomes a concern, a static catalog
 PR_NUMBER=$(gh pr view --json number --jq '.number')
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+# `CONSECUTIVE_CLEAR`, `WATCH_ITER` and the two caps below are values *you*
+# carry in the conversation, the way `finalize.md` carries `REVIEW_MODE` — not
+# shell state. The loop body runs as a series of separate bash blocks (the
+# state-file rationale further down says so), so a plain shell variable resets
+# on every iteration: `WATCH_ITER` would pin at 1, `CONSECUTIVE_CLEAR` would
+# never reach 2, and an unset `MAX_WATCH_ITER` would make
+# `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error — the cap never fires and the
+# watch never ends. Substitute the current numbers into each later block
+# literally.
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
-MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"   # ~2 h at 5-min interval; override via env
-STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters before a check is flagged "stuck" (~30 min); override via env
+# ~2 h at 5-min interval; override with FORGE_MAX_WATCH_ITER. Only a positive
+# integer is taken, and the rejected shapes fail two different ways: a
+# non-numeric override makes `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error
+# every iteration — a failed comparison returns non-zero, so the cap never
+# fires and the loop runs unbounded; a zero-valued one makes that same test
+# true on iteration 1, aborting before a single check. The `case` rejects the
+# first, `-gt 0` the second. `-gt 0` also catches an integer too large for `[`
+# to parse — `case` passes it, and it would then error at the comparison in the
+# loop, reproducing the unbounded run the guard exists to stop.#
+# Do NOT fold the zero test into the `case` as a `0*` arm. A leading zero is
+# **not** read as octal here: `[` parses base 10, so `[ 010 -gt 8 ]` is true on
+# bash, zsh and sh alike. Octal belongs to arithmetic expansion — `$((010))` is
+# 8 — which is a different context. A `0*` arm rejects `010`, a value that
+# works, and still would not cover `00`; `-gt 0` covers every zero-valued form
+# and leaves the working ones alone.
+MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"
+case "$MAX_WATCH_ITER" in *[!0-9]*) MAX_WATCH_ITER=24 ;; esac
+[ "$MAX_WATCH_ITER" -gt 0 ] 2>/dev/null || MAX_WATCH_ITER=24
+# Say so out loud when an explicit override was rejected — silence reads as the
+# variable being ignored outright. Report the value actually in force rather
+# than a hard-coded 24, so this line cannot drift from the default above.
+# User-facing: translate it to the conversation's language, keeping the emoji
+# and the variable name as-is.
+[ -z "${FORGE_MAX_WATCH_ITER:-}" ] \
+  || [ "$FORGE_MAX_WATCH_ITER" = "$MAX_WATCH_ITER" ] \
+  || echo "⚠️ FORGE_MAX_WATCH_ITER='${FORGE_MAX_WATCH_ITER}' is not a positive integer — using $MAX_WATCH_ITER" >&2
+# Consecutive pending iters before a check is flagged "stuck" (~30 min);
+# override with FORGE_STUCK_THRESHOLD. Same guard as the cap above, and for a
+# worse failure: the consumer is `[ "$count" -eq "$STUCK_THRESHOLD" ]`, so a
+# non-numeric override errors on every iteration and the stuck notification
+# never fires — silently, because the loop has no other symptom. A zero-valued
+# one is rejected for the same reason: `count` starts at 1, so `-eq 0` is never
+# true and stuck detection is simply off. `$((STUCK_THRESHOLD * 5))` in the
+# message below needs a number too. Same two tests as the cap above, and the
+# same reason not to use a `0*` arm — see the note there.
+STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"
+case "$STUCK_THRESHOLD" in *[!0-9]*) STUCK_THRESHOLD=6 ;; esac
+[ "$STUCK_THRESHOLD" -gt 0 ] 2>/dev/null || STUCK_THRESHOLD=6
+# User-facing: translate it to the conversation's language, keeping the emoji
+# and the variable name as-is.
+[ -z "${FORGE_STUCK_THRESHOLD:-}" ] \
+  || [ "$FORGE_STUCK_THRESHOLD" = "$STUCK_THRESHOLD" ] \
+  || echo "⚠️ FORGE_STUCK_THRESHOLD='${FORGE_STUCK_THRESHOLD}' is not a positive integer — using $STUCK_THRESHOLD" >&2
 
 # Cross-iteration state for the "neither red nor green" handling (Phase 2/3).
 # Stored in files, NOT shell vars / associative arrays: each iteration may run
@@ -140,7 +96,8 @@ STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"  # consecutive pending iters befor
 # `finalize.md` Step 2 uses the same convention.
 #
 # These three paths are re-derived, not carried over, by any later block that
-# needs them (Section 3 and Cleanup) — see the re-derive preamble there.
+# needs them (Completion notification and Cleanup) — see the re-derive preamble
+# there.
 #   - STREAK_FILE:   per-check pending streak, one "<count>\t<check name>" line each
 #   - NOTIFIED_FILE: space-joined set of awaiting-human check names last notified,
 #                    so a long approval wait doesn't re-notify every 5 minutes
@@ -151,13 +108,16 @@ NOTIFIED_FILE="${FORGE_NOTIFIED_FILE:-$FORGE_STATE_DIR/blocked-notified-$PR_NUMB
 : > "$STREAK_FILE"
 : > "$NOTIFIED_FILE"
 
-# Result marker consumed by Section 3 (notification). Default to "aborted" so
-# any abnormal exit (cap hit, error, killed) produces an honest notification
-# rather than a false "Ready to merge".
+# Result marker consumed by the Completion notification section. Default to
+# "aborted" so any abnormal exit (cap hit, error, killed) produces an honest
+# notification rather than a false "Ready to merge". Like "success" below,
+# "aborted" is a machine key: the notification branch reads this file back and
+# tests it against those literals, so keep both English whatever language the
+# report around them is written in.
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 echo "aborted" > "$WATCH_RESULT_FILE"
 
-# These echoes must be translated to $LANG_CODE before being emitted
+# These echoes must be translated to the conversation's language before being emitted
 echo "🔭 Watching started: PR #$PR_NUMBER ($REPO) on branch $BRANCH"
 echo "📋 Interval: 5 min / Exit: 2 consecutive clears / Cap: $MAX_WATCH_ITER iterations"
 ```
@@ -172,6 +132,9 @@ Increment the iteration counter and bail if the cap was hit.
 Skip the 5-minute wait on the first iteration; otherwise wait:
 
 ```bash
+# These three echoes are user-facing progress reports — translate them to the
+# conversation's language before emitting, keeping the emoji, the timestamps and
+# the variable name `MAX_WATCH_ITER` as-is.
 WATCH_ITER=$((WATCH_ITER + 1))
 if [ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]; then
   echo "⛔ Reached MAX_WATCH_ITER=$MAX_WATCH_ITER without converging. Aborting and reporting."
@@ -353,10 +316,13 @@ only when threads and CR are both clear — fix what's actionable first.
 
 ```bash
 CONSECUTIVE_CLEAR=$((CONSECUTIVE_CLEAR + 1))
+# User-facing — translate, keeping the emoji and the counter as-is.
 echo "✅ Clear $CONSECUTIVE_CLEAR/2 ($(date '+%H:%M'))"
 
 if [ "$CONSECUTIVE_CLEAR" -ge 2 ]; then
-  echo "success" > "$WATCH_RESULT_FILE"   # consumed by Section 3 below
+  # "success" is a machine key read back by the Completion notification section
+  # (`[ "$WATCH_RESULT" = "success" ]`), never shown to the user — keep English.
+  echo "success" > "$WATCH_RESULT_FILE"   # consumed by Completion notification
   break                                    # mirror Phase 1's cap-check break
 fi
 ```
@@ -394,7 +360,7 @@ if [ -n "$BLOCKED_NAMES" ] && [ "$BLOCKED_NAMES" != "$PREV_NOTIFIED" ]; then
 fi
 ```
 
-(Translate the `echo` lines and the notification title/body to `$LANG_CODE`;
+(Translate the `echo` lines and the notification title/body to the conversation's language;
 keep emoji, check names, and URLs as-is.) Then **return to Phase 1** — keep
 watching so the loop converges the moment the gate is cleared.
 
@@ -448,13 +414,14 @@ done <<< "$PENDING_NOW"
 printf '%s' "$NEW_STREAK" > "$STREAK_FILE"   # checks absent this pass drop out → streak reset
 ```
 
-(Translate the `echo` / notification strings to `$LANG_CODE`; keep emoji and
+(Translate the `echo` / notification strings to the conversation's language; keep emoji and
 check names as-is.) Then **return to Phase 1**.
 
 ##### ❌ Problems found
 
 ```bash
 CONSECUTIVE_CLEAR=0
+# User-facing — translate, keeping the emoji and the timestamp as-is.
 echo "⚠️ Problems detected — counter reset ($(date '+%H:%M'))"
 ```
 
@@ -562,7 +529,7 @@ git commit -m "fix: CI failure — <concrete fix>"
 git push
 ```
 
-(Subject prefix `fix:` stays English; translate only the body to `$LANG_CODE`.)
+(Subject prefix `fix:` stays English; translate only the body to the conversation's language.)
 
 ###### Review comment response
 
@@ -615,7 +582,7 @@ gh api graphql -f query='
   }' -F id="$THREAD_ID"
 ```
 
-(All reply bodies must be translated to `$LANG_CODE`; the mutations are
+(All reply bodies must be translated to the conversation's language; the mutations are
 language-neutral. Commit subject prefixes stay English.)
 
 ###### Changes Requested response
@@ -727,7 +694,7 @@ done
 
 ---
 
-## Section 3: Completion notification
+## Completion notification
 
 Run after the watch loop exits (either via success-`break` or cap-`break`).
 
@@ -748,6 +715,8 @@ FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 WATCH_RESULT_FILE="${FORGE_RESULT_FILE:-$FORGE_STATE_DIR/watch-result-$PR_NUMBER}"
 
 WATCH_RESULT=$(cat "$WATCH_RESULT_FILE" 2>/dev/null || echo "aborted")
+# The label is user-facing — translate it. `$WATCH_RESULT` is the machine key
+# the branch below tests (`success` / `aborted`); print it verbatim.
 echo "🛰  Outcome: $WATCH_RESULT"
 ```
 
@@ -760,11 +729,11 @@ PR_URL=$(gh pr view --json url --jq '.url')
 
 ### Desktop notification (macOS)
 
-Branch on `$WATCH_RESULT`. Translate the title and body to `$LANG_CODE`.
+Branch on `$WATCH_RESULT`. Translate the title and body to the conversation's language.
 
 ```bash
 if [ "$WATCH_RESULT" = "success" ]; then
-  # Example ($LANG_CODE=en)
+  # Example (shown here in English)
   osascript -e "display notification \"All CI checks and reviews passed! Ready to merge 🎉\" \
     with title \"Forge — PR #$PR_NUMBER complete\" \
     sound name \"Glass\""
@@ -778,7 +747,7 @@ fi
 
 ### Final terminal report
 
-Two shapes, one per outcome. Translate all labels to `$LANG_CODE`; keep emoji as-is.
+Two shapes, one per outcome. Translate all labels to the conversation's language; keep emoji as-is.
 For the aborted shape, fill the State column by re-running the Phase 2 queries
 above so the report reflects the current actual state.
 
@@ -852,8 +821,9 @@ BLOCKED_NOW=$(printf '%s\n%s\n' "$BLOCKED_NOW_API" "$BLOCKED_NOW_CHECKS" \
 ### Cleanup
 
 ```bash
-# Same re-derive as Section 3 — an unset path would make every `rm -f` a no-op
-# and leave stale streak counts for the next run on this PR to read.
+# Same re-derive as Completion notification — an unset path would make every
+# `rm -f` a no-op and leave stale streak counts for the next run on this PR to
+# read.
 PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number --jq '.number')}
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
 
