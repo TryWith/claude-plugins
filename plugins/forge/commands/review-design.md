@@ -207,6 +207,20 @@ stage came up empty" branch below — the one that tells the user to pass an
 explicit path — never fires. The user is offered their conventions file as the
 document to review.
 
+**The same trap has a second door, and this repository falls through it.**
+`*design*` matches `plugins/forge/commands/review-design.md` — this command's
+own file. With `docs/superpowers/` in `.gitignore`, which is how this
+repository keeps design documents out of git, a fresh clone has no design
+documents at all: Stages 1 and 2 print nothing and that file is Stage 3's
+**only** line. So **exclude the command files of the plugin this command ships
+in**, on the same terms as the `CLAUDE.md` hits and for a sharper reason: a
+file that *describes* this reviewer is not a document *for* it, and offering it
+puts a question to the user whose only honest answer ends the run with nowhere
+to go.
+
+When removing both groups leaves nothing, that **is** the empty case — take the
+"every stage came up empty" branch rather than asking about whatever survived.
+
 `*design*` and `*plan*` are a wide net: they match any path that merely
 contains the word, this command's own file included. **Never take a candidate
 that only those two patterns matched silently** — put it to the user as a
@@ -1203,7 +1217,7 @@ lines, not the *Re-review after fixes* headers — that header belongs to
 would read every pass as the first. Count only the lines **you** emitted on
 arriving here, never one inside quoted document text: when `FORMAT_OK` is `0` a
 finding quotes the offending line verbatim, and a target that documents this
-command — `review-design.md` is itself a hit on Stage 2's `*design*` net —
+command — `review-design.md` is itself a hit on Stage 3's `*design*` net —
 carries `pass n/3` in its own prose. Reading a quoted line as an arrival
 inflates the count and ends the loop early.
 

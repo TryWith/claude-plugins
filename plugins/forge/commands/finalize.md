@@ -145,16 +145,21 @@ REVIEW_ENV_FILE="${FORGE_REVIEW_ENV_FILE:-$(git rev-parse --absolute-git-dir)/fo
 # against the $PR_NUMBER the sourcing block re-derived for itself.
 cat > "$REVIEW_ENV_FILE" <<'FORGE_ENV'
 FORGE_STATE_DIR="$(git rev-parse --absolute-git-dir)/forge"
-# Override with FORGE_MAX_REVIEW_LOOP. Only a positive integer with no leading
-# zero is taken, and the three rejected shapes fail three different ways: a
-# non-numeric override makes 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]`
-# error, and a failed comparison returns non-zero — the cap would never fire;
-# `0` makes that same test true on the first pass, so no review ever starts;
-# and a leading zero is read as octal by `[ -ge ]`, so `010` would cap at 8.
-# Fall back to the default rather than any of the three — one `case` covers
-# all of them.
+# Override with FORGE_MAX_REVIEW_LOOP. Only a positive integer is taken, and
+# the rejected shapes fail two different ways: a non-numeric override makes
+# 2-2's `[ "$REVIEW_LOOP" -ge "$MAX_REVIEW_LOOP" ]` error, and a failed
+# comparison returns non-zero — the cap would never fire; a zero-valued one
+# makes that same test true on the first pass, so no review ever starts. The
+# `case` rejects the first, `-ge`'s companion test `-gt 0` the second, and that
+# test also catches an integer too large for `[` to parse.
+#
+# Do NOT fold the zero test into the `case` as a `0*` arm. A leading zero is
+# **not** read as octal here: `[` parses base 10, so `[ 010 -ge 8 ]` is true.
+# Octal belongs to arithmetic expansion (`$((010))` is 8), a different context.
+# A `0*` arm rejects `010`, which works, and still would not cover `00`.
 MAX_REVIEW_LOOP="${FORGE_MAX_REVIEW_LOOP:-10}"
-case "$MAX_REVIEW_LOOP" in ''|*[!0-9]*|0*) MAX_REVIEW_LOOP=10 ;; esac
+case "$MAX_REVIEW_LOOP" in *[!0-9]*) MAX_REVIEW_LOOP=10 ;; esac
+[ "$MAX_REVIEW_LOOP" -gt 0 ] 2>/dev/null || MAX_REVIEW_LOOP=10
 REVIEW_LOOP_FILE="${FORGE_REVIEW_LOOP_FILE:-$FORGE_STATE_DIR/review-loop-$PR_NUMBER}"
 REVIEW_TREE_FILE="${FORGE_REVIEW_TREE_FILE:-$FORGE_STATE_DIR/review-tree-$PR_NUMBER}"
 # Working buffers. The durable home for deferred findings is the PR comment

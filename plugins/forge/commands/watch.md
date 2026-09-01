@@ -35,16 +35,23 @@ BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
 CONSECUTIVE_CLEAR=0
 WATCH_ITER=0
 # ~2 h at 5-min interval; override with FORGE_MAX_WATCH_ITER. Only a positive
-# integer with no leading zero is taken, and the three rejected shapes fail
-# three different ways: a non-numeric override makes
-# `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error every iteration — in bash a
-# failed comparison returns non-zero, so the cap never fires and the loop runs
-# unbounded; `0` makes that same test true on iteration 1, aborting before a
-# single check; and a leading zero is read as octal by `[ -gt ]`, so `010`
-# would silently cap at 8 and `08` would error. Fall back to the default rather
-# than any of the three — one `case` covers all of them.
+# integer is taken, and the rejected shapes fail two different ways: a
+# non-numeric override makes `[ "$WATCH_ITER" -gt "$MAX_WATCH_ITER" ]` error
+# every iteration — a failed comparison returns non-zero, so the cap never
+# fires and the loop runs unbounded; a zero-valued one makes that same test
+# true on iteration 1, aborting before a single check. The `case` rejects the
+# first, `-gt 0` the second. `-gt 0` also catches an integer too large for `[`
+# to parse — `case` passes it, and it would then error at the comparison in the
+# loop, reproducing the unbounded run the guard exists to stop.#
+# Do NOT fold the zero test into the `case` as a `0*` arm. A leading zero is
+# **not** read as octal here: `[` parses base 10, so `[ 010 -gt 8 ]` is true on
+# bash, zsh and sh alike. Octal belongs to arithmetic expansion — `$((010))` is
+# 8 — which is a different context. A `0*` arm rejects `010`, a value that
+# works, and still would not cover `00`; `-gt 0` covers every zero-valued form
+# and leaves the working ones alone.
 MAX_WATCH_ITER="${FORGE_MAX_WATCH_ITER:-24}"
-case "$MAX_WATCH_ITER" in ''|*[!0-9]*|0*) MAX_WATCH_ITER=24 ;; esac
+case "$MAX_WATCH_ITER" in *[!0-9]*) MAX_WATCH_ITER=24 ;; esac
+[ "$MAX_WATCH_ITER" -gt 0 ] 2>/dev/null || MAX_WATCH_ITER=24
 # Say so out loud when an explicit override was rejected — silence reads as the
 # variable being ignored outright. Report the value actually in force rather
 # than a hard-coded 24, so this line cannot drift from the default above.
@@ -57,13 +64,14 @@ case "$MAX_WATCH_ITER" in ''|*[!0-9]*|0*) MAX_WATCH_ITER=24 ;; esac
 # override with FORGE_STUCK_THRESHOLD. Same guard as the cap above, and for a
 # worse failure: the consumer is `[ "$count" -eq "$STUCK_THRESHOLD" ]`, so a
 # non-numeric override errors on every iteration and the stuck notification
-# never fires — silently, because the loop has no other symptom. Zero is
-# rejected for the same reason: `count` starts at 1, so `-eq 0` is never true
-# and stuck detection is off. A leading zero goes with them: `[ -eq ]` reads
-# `010` as octal 8. `$((STUCK_THRESHOLD * 5))` in the message below needs a
-# number too.
+# never fires — silently, because the loop has no other symptom. A zero-valued
+# one is rejected for the same reason: `count` starts at 1, so `-eq 0` is never
+# true and stuck detection is simply off. `$((STUCK_THRESHOLD * 5))` in the
+# message below needs a number too. Same two tests as the cap above, and the
+# same reason not to use a `0*` arm — see the note there.
 STUCK_THRESHOLD="${FORGE_STUCK_THRESHOLD:-6}"
-case "$STUCK_THRESHOLD" in ''|*[!0-9]*|0*) STUCK_THRESHOLD=6 ;; esac
+case "$STUCK_THRESHOLD" in *[!0-9]*) STUCK_THRESHOLD=6 ;; esac
+[ "$STUCK_THRESHOLD" -gt 0 ] 2>/dev/null || STUCK_THRESHOLD=6
 # User-facing: translate it to the conversation's language, keeping the emoji
 # and the variable name as-is.
 [ -z "${FORGE_STUCK_THRESHOLD:-}" ] \
