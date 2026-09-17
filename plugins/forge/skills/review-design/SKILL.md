@@ -59,7 +59,9 @@ through the table below.
 3. **Judge and report.** Read `references/3-verdict.md`. Its *Where to stop*
    decides whether the run ends with the report.
 4. **Resolve, apply, re-review** — only when `--fix` was passed. Read
-   `references/4-fix.md`.
+   `references/4-fix.md`. A report-only run opens it for one thing only:
+   when *Where to stop* sends a `READY` plan to Section 8's *Handing off to
+   implementation* block, read that block there and print it.
 
 | Section | File |
 |---|---|
