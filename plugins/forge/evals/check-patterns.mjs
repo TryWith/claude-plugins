@@ -6,23 +6,28 @@
 //
 // Usage: node check-patterns.mjs [eval-dir]   (default: this file's directory)
 //
-// pattern-samples.json maps a grader path relative to the eval directory, such
-// as "_shared/graders/verdict-once.md", to { "match": [...], "no_match": [...] }.
+// A grader's pattern is the body of its file, below the frontmatter, trimmed.
+// pattern-samples.json maps a grader's file name, such as
+// "verdict-line-not-ready.md", to { "match": [...], "no_match": [...] }.
 // "match" lists strings the pattern must find; for a not_contains or count:0
 // grader those are the violations it exists to catch.
+//
+// The same grader appears in several cases as a copy — `claude plugin eval`
+// reads graders per case, with no suite-wide sharing. Copies drift, so every
+// grader file (of any type) that shares a name with another must be
+// byte-identical to it, and the samples are keyed by that shared name.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const evalDir = path.resolve(process.argv[2] ?? path.dirname(fileURLToPath(import.meta.url)));
-const sharedDir = path.join(evalDir, '_shared', 'graders');
 const failures = [];
 
 function graderFiles() {
   const files = [];
   for (const entry of fs.readdirSync(evalDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === 'results') continue;
-    const dir = entry.name === '_shared' ? sharedDir : path.join(evalDir, entry.name, 'graders');
+    if (!entry.isDirectory() || entry.name === 'results' || entry.name === 'mocks') continue;
+    const dir = path.join(evalDir, entry.name, 'graders');
     if (!fs.existsSync(dir)) continue;
     for (const name of fs.readdirSync(dir).sort()) {
       if (name.endsWith('.md')) files.push(path.join(dir, name));
@@ -31,59 +36,60 @@ function graderFiles() {
   return files;
 }
 
-// A case's copy of a shared grader is checked once, through the shared file:
-// either a symlink to it, or a byte-identical copy when symlinks are not
-// followed by `claude plugin eval` (BASELINE.md, Harness notes V1).
-function isSharedCopy(file) {
-  if (path.dirname(file) === sharedDir) return false;
-  const shared = path.join(sharedDir, path.basename(file));
-  if (!fs.existsSync(shared)) return false;
-  if (fs.realpathSync(file) === fs.realpathSync(shared)) return true;
-  return fs.readFileSync(file).equals(fs.readFileSync(shared));
-}
-
-function frontmatter(file) {
-  const m = fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/);
+function parse(file) {
+  const m = fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) return null;
   const fields = {};
   for (const line of m[1].split('\n')) {
     const kv = line.match(/^([a-z_]+):\s*(.*)$/);
-    if (kv) fields[kv[1]] = kv[2].trimEnd();
+    if (kv) fields[kv[1]] = kv[2].trimEnd().replace(/^["']|["']$/g, '');
   }
-  return fields;
+  return { fields, body: m[2].trim() };
 }
 
-const samplesPath = path.join(evalDir, 'pattern-samples.json');
-const samples = JSON.parse(fs.readFileSync(samplesPath, 'utf8'));
+const rel = (file) => path.relative(evalDir, file).split(path.sep).join('/');
+
+// Group by file name; the first copy of each name is the one checked.
+const byName = new Map();
+for (const file of graderFiles()) {
+  const name = path.basename(file);
+  if (!byName.has(name)) byName.set(name, []);
+  byName.get(name).push(file);
+}
+
+const samples = JSON.parse(fs.readFileSync(path.join(evalDir, 'pattern-samples.json'), 'utf8'));
 const seen = new Set();
 let graders = 0;
 let checks = 0;
 
-for (const file of graderFiles()) {
-  if (isSharedCopy(file)) continue;
-  const key = path.relative(evalDir, file).split(path.sep).join('/');
-  const fields = frontmatter(file);
-  if (!fields || fields.type !== 'regex') continue;
-  seen.add(key);
-  const raw = fields.pattern ?? '';
-  // Single quotes only: in a double-quoted YAML scalar `\d`, `\b` and friends
-  // are escape sequences, so the eval would read a different pattern than this.
-  if (!/^'.*'$/.test(raw)) {
-    failures.push(`${key}: pattern must be a single-quoted YAML scalar`);
+for (const [name, files] of byName) {
+  const first = fs.readFileSync(files[0]);
+  for (const other of files.slice(1)) {
+    if (!fs.readFileSync(other).equals(first)) {
+      failures.push(`${rel(other)}: differs from ${rel(files[0])} — same-named graders must be identical copies`);
+    }
+  }
+  const parsed = parse(files[0]);
+  if (!parsed) {
+    failures.push(`${rel(files[0])}: no frontmatter`);
     continue;
   }
-  const source = raw.slice(1, -1).replace(/''/g, "'");
-  const flags = (fields.flags ?? '').replace(/^["']|["']$/g, '');
+  if (parsed.fields.type !== 'regex') continue;
+  seen.add(name);
+  if (parsed.body === '') {
+    failures.push(`${rel(files[0])}: empty pattern (the body below the frontmatter)`);
+    continue;
+  }
   let re;
   try {
-    re = new RegExp(source, flags);
+    re = new RegExp(parsed.body, parsed.fields.flags ?? '');
   } catch (err) {
-    failures.push(`${key}: pattern does not compile: ${err.message}`);
+    failures.push(`${rel(files[0])}: pattern does not compile: ${err.message}`);
     continue;
   }
-  const s = samples[key];
+  const s = samples[name];
   if (!s || !Array.isArray(s.match) || s.match.length === 0 || !Array.isArray(s.no_match) || s.no_match.length === 0) {
-    failures.push(`${key}: needs at least one "match" and one "no_match" sample in pattern-samples.json`);
+    failures.push(`${name}: needs at least one "match" and one "no_match" sample in pattern-samples.json`);
     continue;
   }
   graders++;
@@ -91,14 +97,14 @@ for (const file of graderFiles()) {
     for (const text of list) {
       checks++;
       if (re.test(text) !== want) {
-        failures.push(`${key}: expected ${want ? 'a match' : 'no match'} on ${JSON.stringify(text)}`);
+        failures.push(`${name}: expected ${want ? 'a match' : 'no match'} on ${JSON.stringify(text)}`);
       }
     }
   }
 }
 
 for (const key of Object.keys(samples)) {
-  if (!seen.has(key)) failures.push(`${key}: has samples but no regex grader exists at that path`);
+  if (!seen.has(key)) failures.push(`${key}: has samples but no regex grader has that file name`);
 }
 
 if (failures.length > 0) {
