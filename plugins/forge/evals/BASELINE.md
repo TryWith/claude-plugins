@@ -218,6 +218,19 @@ DISABLE_AUTOUPDATER=1 claude plugin eval . --ablation with-without --scaffold \
 | 05 | `2026-09-17T13-45-11-392Z` |
 | 08 | `2026-09-17T13-49-00-881Z` |
 
+In the full run `2026-09-17T12-44-57-403Z`, `05-typo-flag`'s `does-not-review`
+passed 2/3 (an llm-judge grader, so judge variance is a plausible reading, not
+a finding), and `08-companion-spec-nl`'s `verdict-line-not-ready` passed 2/3
+because one run's final message wrapped the verdict line in bold markdown —
+`**Verdict: ❌ NOT READY   Blocker 1 / Major 2 / Minor 1 / Ask 1**` — so the
+line did not start with `Verdict:` and the grader's `^Verdict: \S+ NOT READY`
+regex missed it. Both cases were rerun alone with `--runs 3` and passed 3/3
+(`2026-09-17T13-45-11-392Z` and `2026-09-17T13-49-00-881Z`), so under this
+file's re-run rule (§ Step 7 of the migration task) they are recorded below as
+fluctuation, not regression. The bolded verdict line is worth watching in
+stage 2b: a CI gate that greps `^Verdict:` on the raw message would have
+missed that run.
+
 With-plugin passes out of 3:
 
 | Case | Grader | With |
