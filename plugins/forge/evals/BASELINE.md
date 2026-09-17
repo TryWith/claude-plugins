@@ -219,17 +219,19 @@ DISABLE_AUTOUPDATER=1 claude plugin eval . --ablation with-without --scaffold \
 | 08 | `2026-09-17T13-49-00-881Z` |
 
 In the full run `2026-09-17T12-44-57-403Z`, `05-typo-flag`'s `does-not-review`
-passed 2/3 (an llm-judge grader, so judge variance is a plausible reading, not
-a finding), and `08-companion-spec-nl`'s `verdict-line-not-ready` passed 2/3
-because one run's final message wrapped the verdict line in bold markdown —
+passed 2/3 (the grader is an llm judge; the cause was not established. Stage
+2a's `05` answers now read `references/1-resolve.md` before stopping — one
+turn became three — and comment on the path before they stop, which the judge
+may have scored as starting a review), and `08-companion-spec-nl`'s
+`verdict-line-not-ready` passed 2/3 because one run's final message wrapped
+the verdict line in bold markdown —
 `**Verdict: ❌ NOT READY   Blocker 1 / Major 2 / Minor 1 / Ask 1**` — so the
 line did not start with `Verdict:` and the grader's `^Verdict: \S+ NOT READY`
 regex missed it. Both cases were rerun alone with `--runs 3` and passed 3/3
-(`2026-09-17T13-45-11-392Z` and `2026-09-17T13-49-00-881Z`), so under this
-file's re-run rule (§ Step 7 of the migration task) they are recorded below as
-fluctuation, not regression. The bolded verdict line is worth watching in
-stage 2b: a CI gate that greps `^Verdict:` on the raw message would have
-missed that run.
+(`2026-09-17T13-45-11-392Z` and `2026-09-17T13-49-00-881Z`), so under the
+re-run rule under *Scores* above they are recorded below as fluctuation, not
+regression. The bolded verdict line is worth watching in stage 2b: a CI gate
+that greps `^Verdict:` on the raw message would have missed that run.
 
 With-plugin passes out of 3:
 
@@ -270,3 +272,11 @@ With-plugin passes out of 3:
 
 **Result:** every with-plugin grader passed 3/3, so stage 2a meets the stage 2
 pass condition above.
+
+This suite exercises report-only runs only: no case passes `--fix`, and every
+review case ends `NOT READY`, so neither the `--fix` flow across
+`references/4-fix.md` nor the report-only handoff block for a `READY` plan is
+covered by this result; both need fixtures in stage 2b. After this run,
+commit 71392f0 reworded SKILL.md's checklist step 4 so a report-only `READY`
+plan reads that handoff block in `references/4-fix.md`; the change is to the
+checklist only, C1 still passes, and it was not re-evaluated.
