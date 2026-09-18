@@ -79,6 +79,15 @@ genuinely unclear, leave it out of the block and raise it as a `Minor`
 `A Completeness` finding — the document did not say whether the file exists —
 rather than asserting it is missing.
 
+**A path the document creates anywhere is in the creation group for the whole
+document**, however a later sentence names it. Sorting sentence by sentence
+without this gets the commonest plan shape wrong: a plan that lists
+`Create: src/foo.test.ts` under one task and `Modify: src/foo.test.ts` under the
+next is well formed — the second task edits what the first wrote — and reading
+that second sentence on its own puts a file the plan has not written yet into
+the existence check, where it comes back `MISSING` and Section 4's table turns
+it into a `Blocker`. Read the document's creation list first, then sort.
+
 ```bash
 # Do the paths the document treats as already present actually exist? Check
 # them all in one block. Creation targets do not belong here — see above.

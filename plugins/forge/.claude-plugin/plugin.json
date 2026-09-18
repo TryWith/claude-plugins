@@ -20,8 +20,5 @@
     "spec",
     "design-review"
   ],
-  "license": "Apache-2.0",
-  "components": {
-    "commands": ["commands/"]
-  }
+  "license": "Apache-2.0"
 }

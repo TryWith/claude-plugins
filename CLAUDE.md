@@ -16,17 +16,27 @@ A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There 
 ## Validation (there is no build)
 
 ```bash
-jq -e . .claude-plugin/marketplace.json
-jq -e . plugins/<name>/.claude-plugin/plugin.json
+claude plugin validate . --strict
+claude plugin validate plugins/<name> --strict
 node plugins/forge/evals/check-patterns.mjs
 ```
 
-The third one is free and takes a second. Run it after **any** edit under
+`claude plugin validate` is the check to run on a manifest, not `jq`. `jq -e .`
+only proves the file is JSON: it passes a manifest whose fields Claude Code
+silently ignores, which is how `"components": {"commands": [...]}` sat in
+`plugins/forge/.claude-plugin/plugin.json` describing the plugin's contents to
+nobody. `--strict` turns those warnings into a non-zero exit. Pointed at a
+directory rather than a manifest it also validates the skills, agents and
+commands under it.
+
+The eval check is free and takes a second. Run it after **any** edit under
 `plugins/forge/evals/` — it is the only check that catches a mistyped `regex`
 grader (a `not_contains` pattern that matches nothing passes every eval run,
-broken or not) and the only one that catches a shared `fixture.sh` or grader
-copy that has drifted from its siblings. A full eval run costs about $20 and
-nobody runs one for a one-line grader edit; this is what stands in for it.
+broken or not), the only one that catches a grader field `claude plugin eval`
+would refuse the whole case over, and the only one that catches a shared
+`fixture.sh` or grader copy that has drifted from its siblings. A full eval run
+costs about $20 and nobody runs one for a one-line grader edit; this is what
+stands in for it.
 
 ### Evals
 

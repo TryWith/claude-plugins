@@ -300,3 +300,14 @@ precede `Verdict:` on the verdict line, which is the root cause of the bolded
 line recorded above; and Section 5's `--fix` hint example now quotes the path,
 as the rule beside it already required. Version bumped to 1.7.1 for the run that
 verifies them.
+
+A later review added two more, on the same 1.7.1: Perspective C now says that a
+path the document creates **anywhere** is in the creation group for the whole
+document, so a plan that creates a file in one task and modifies it in the next
+(`03`/`07`/`08`'s fixture does exactly that with `src/pricing.test.ts`) cannot
+be sorted into the existence check by the later sentence — which is the false
+`Blocker` `no-false-missing` exists to catch, reachable by following the rule as
+it was written; and the *Spec cross-reference* rerun now says that its "read
+every hit" means every design-document candidate, excluding the `CLAUDE.md` and
+own-plugin hits the merged Stage 3 carries, which a plan with no companion spec
+would otherwise rank as its spec.

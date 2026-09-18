@@ -310,7 +310,14 @@ header line. Resolve the companion spec in this order:
    unattended form, so that is the common route, not the rare one. In every
    case but a search that already reached Stage 3, run
    Stage 3's `find` yourself and read **every** hit it returns before concluding
-   there is no companion spec — not only the `*/specs/*` ones. This step exists
+   there is no companion spec — not only the `*/specs/*` ones. **Every hit**
+   means every *design-document candidate*: the two groups the staged search
+   separates out above — the `CLAUDE.md` / `CLAUDE.local.md` hits the merged
+   form carries, and the files of the plugin this command ships in — are not
+   candidates here either. A plan with no companion spec is exactly the case
+   that reaches this step, and it is the case where a conventions file or one of
+   this command's own `references/` files would otherwise be the best-ranked hit
+   left. This step exists
    for the repository that does **not** keep its specs in a directory named
    `specs/`; filtering the hits down to that name asks the question the step was
    written to stop asking, and Stage 2's own rationale below already grants that
