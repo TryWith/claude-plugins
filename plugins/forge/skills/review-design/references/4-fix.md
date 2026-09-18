@@ -393,18 +393,24 @@ The example continues the abridged report in Section 5, so its `Applied:` list
 is abridged the same way — it shows four of the changes, not all of them, which
 is why four bullets do not account for every count that report carried.
 
-When Section 7 wrote nothing, the header is wrong too: no fixes were applied
-and no re-review ran, so title that block `── No changes applied ──` rather
-than `── Re-review after fixes ──`. Items 2 and 3 also have no subject: emit
+When Section 7 wrote nothing, the header is wrong too: no fixes were applied,
+so title that block `── No changes applied ──` rather than
+`── Re-review after fixes ──`. Items 2 and 3 also have no subject: emit
 the verdict, say in one line **why** nothing was written, and print no
 `Applied:` list and no `git diff` pointer. An empty bullet list under
 `Applied:` and a diff pointer at an unchanged file both read as "something
 happened here" when nothing did.
-The two reasons are not interchangeable: *no change was needed* when there was
-nothing to apply, and *every proposed change was declined* when the file is
-unchanged because each `Ask` was answered "keep the document as written".
-Reporting the second as the first leaves the `NOT READY` beside it
-unexplained.
+The three reasons are not interchangeable: *no change was needed* when there was
+nothing to apply; *every proposed change was declined* when the file is
+unchanged because each `Ask` was answered "keep the document as written"; and
+*the companion spec was supplied and the plan re-reviewed against it* on the one
+path where Section 7 writes nothing and the *Loop* above re-reviews anyway —
+Section 6's *The spec is at this path* set `SPEC_FILE`. Reporting the second as
+the first leaves the `NOT READY` beside it unexplained. The third is the reason
+this block does not say "and no re-review ran": on that path one did, its
+Perspective F coverage findings are the reason the verdict moved, and the
+re-emitted Section 5 report above carries them — say which of the three it was
+rather than letting an unchanged file imply the run learned nothing.
 
 `git diff` reports tracked files only. Design documents often sit in an ignored
 or untracked directory — a repository that keeps `docs/superpowers/` out of git

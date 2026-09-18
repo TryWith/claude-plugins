@@ -64,6 +64,23 @@ const rel = (file) => path.relative(evalDir, file).split(path.sep).join('/');
 const GRADER_TYPES = ['regex', 'tool_order', 'tool_used', 'file_exists', 'llm', 'baseline'];
 const TARGETS = ['trace', 'last_message', 'files', 'mock_calls'];
 
+// The schema is **strict**: it rejects a field it does not know, so a misspelt
+// *key* is as fatal as a misspelt value — and it fails silently on the way in
+// rather than loudly here, because nothing else reads these files. `wieght: 0.5`
+// leaves the grader at weight 1 and moves every score in BASELINE.md's table;
+// `input_mach: review-design` turns "the skill was never called *for this
+// document*" into "the skill was never called at all". Per type, the fields the
+// frontmatter may carry (`name` comes from the file name and the pattern or
+// rubric from the body, so neither is listed as a frontmatter field here).
+const GRADER_FIELDS = {
+  regex: ['type', 'name', 'target', 'match', 'flags', 'weight', 'arm'],
+  tool_order: ['type', 'name', 'before', 'after', 'weight', 'arm'],
+  tool_used: ['type', 'name', 'tool', 'input_match', 'min', 'max', 'weight', 'arm'],
+  file_exists: ['type', 'name', 'path', 'exists', 'weight', 'arm'],
+  llm: ['type', 'name', 'focus', 'weight', 'arm'],
+  baseline: ['type', 'name', 'baseline_file', 'weight', 'arm'],
+};
+
 // A target is one of those four words, or a `{source: file, path: …}` mapping.
 const badTarget = (v) =>
   !TARGETS.includes(v) && !/^\{\s*source:\s*file\s*,\s*path:\s*\S/.test(v);
@@ -74,6 +91,11 @@ function checkFields(where, fields) {
   if (!GRADER_TYPES.includes(type)) {
     bad(`type ${JSON.stringify(type ?? '')} must be one of ${GRADER_TYPES.join(' | ')}`);
     return;
+  }
+  for (const key of Object.keys(fields)) {
+    if (!GRADER_FIELDS[type].includes(key)) {
+      bad(`unknown field \`${key}\` for type ${type} — allowed: ${GRADER_FIELDS[type].join(', ')}`);
+    }
   }
   if (fields.weight !== undefined && !(Number(fields.weight) > 0)) {
     bad(`weight ${JSON.stringify(fields.weight)} must be a positive number`);
@@ -101,6 +123,16 @@ function checkFields(where, fields) {
       if (fields[k] !== undefined && !/^\d+$/.test(fields[k])) {
         bad(`${k} ${JSON.stringify(fields[k])} must be a non-negative integer`);
       }
+    }
+    // A `max: 0` grader is a "this tool must NOT be called" check, and on
+    // `tool: Skill` the harness treats an `arm`-less grader as a plugin-fired
+    // *indicator* under `--ablation with-without` — displayed, never scored. So
+    // the negative control passes the eye and contributes nothing to the score
+    // it was written to defend, and `--threshold` cannot fail on it. `arm: both`
+    // is what makes it count; `min` must be stated too, since it defaults to 1.
+    if (fields.max === '0') {
+      if (fields.min === undefined) bad('a `max: 0` tool_used grader must also set `min: 0` (min defaults to 1)');
+      if (fields.arm !== 'both') bad('a `max: 0` tool_used grader must set `arm: both`, or it is displayed but not scored');
     }
   }
   if (type === 'file_exists') {
@@ -138,6 +170,7 @@ function checkFixtures() {
     const file = path.join(evalDir, name, 'fixture.sh');
     if (fs.existsSync(file)) fixtures.set(name, fs.readFileSync(file));
   }
+  const declaredBy = new Map();
   for (const [name, body] of fixtures) {
     const text = body.toString('utf8');
     const header = leadingComment(text);
@@ -157,14 +190,41 @@ function checkFixtures() {
       failures.push(`${name}/fixture.sh: "Shared verbatim by" does not list its own case`);
       continue;
     }
+    const siblings = new Set();
     for (const other of declared) {
       if (other === name) continue;
       if (!fixtures.has(other)) {
         failures.push(`${name}/fixture.sh: names ${other}, which has no fixture.sh`);
-      } else if (other > name && !fixtures.get(other).equals(body)) {
-        // Compared once per pair, from its earlier member: comparing both ways
-        // reports one drifted fixture as two or more identical failures.
-        failures.push(`${other}/fixture.sh: differs from ${name}/fixture.sh — shared fixtures must be identical copies`);
+      } else {
+        siblings.add(other);
+      }
+    }
+    declaredBy.set(name, siblings);
+  }
+
+  // Every member of a shared group names every other member, so disagreeing
+  // lists are themselves the defect — and they are what lets drift hide.
+  // Driving the comparison off one side's list alone (the earlier member's, say)
+  // means an edit that both changes a fixture and drops a sibling from its own
+  // header is never compared against that sibling: the sibling still names it,
+  // but nothing reads that direction. Check the declarations both ways, and pair
+  // off an unordered pair whenever *either* side names the other — still once
+  // per pair, so one drifted fixture is still one failure.
+  for (const [name, siblings] of declaredBy) {
+    for (const other of siblings) {
+      if (!declaredBy.get(other)?.has(name)) {
+        failures.push(`${other}/fixture.sh: "Shared verbatim by" does not list ${name}, which lists it — a shared group names all of its members`);
+      }
+    }
+  }
+  const compared = new Set();
+  for (const [name, siblings] of declaredBy) {
+    for (const other of siblings) {
+      const [lo, hi] = name < other ? [name, other] : [other, name];
+      if (compared.has(`${lo}|${hi}`)) continue;
+      compared.add(`${lo}|${hi}`);
+      if (!fixtures.get(lo).equals(fixtures.get(hi))) {
+        failures.push(`${hi}/fixture.sh: differs from ${lo}/fixture.sh — shared fixtures must be identical copies`);
       }
     }
   }

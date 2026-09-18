@@ -70,8 +70,14 @@ between:
 | 08-companion-spec-nl | 1.00 | 0.86 | +0.14 |
 | **Mean** | **1.00** | **0.78** | **+0.22** |
 
-Passes out of 3, with plugin / without. `trigger-*` graders are reported for the
-with-plugin arm only and are not scored.
+Passes out of 3, with plugin / without. Every `trigger-*` grader below was
+recorded as with-plugin-only and unscored — an `arm`-less `tool: Skill` grader
+is a plugin-fired indicator under ablation, not part of the score. That still
+describes the `trigger-fired` rows. It no longer describes `06`'s and `07`'s
+`trigger-not-fired` rows: they have since gained `arm: both` and count in both
+arms from the next run on, so the `—` in their Without column is a record of
+this run, not what to expect from the next. See *Suite edit, not re-evaluated*
+at the end of this file.
 
 | Case | Grader | With | Without |
 |---|---|---|---|
@@ -300,6 +306,19 @@ precede `Verdict:` on the verdict line, which is the root cause of the bolded
 line recorded above; and Section 5's `--fix` hint example now quotes the path,
 as the rule beside it already required. Version bumped to 1.7.1 for the run that
 verifies them.
+
+**Suite edit, not re-evaluated.** `06`'s and `07`'s `trigger-not-fired` graders
+set `min: 0` / `max: 0` but no `arm`, and on `tool: Skill` the harness reads an
+`arm`-less grader under `--ablation with-without` as a plugin-fired *indicator*:
+displayed, never scored. So the two negative controls — the whole point of `06`
+and `07` — contributed nothing to those cases' 1.00, and `--threshold` could not
+have failed on them. Both now carry `arm: both`, which is what the harness
+documents for a "must NOT call tool X" check, and `check-patterns.mjs` now
+rejects a `max: 0` grader that omits it. The scores above are unaffected: the
+grader passes 3/3 in both arms (without the plugin the skill cannot fire), so it
+adds a passing weight-1 grader to each case's numerator and denominator alike —
+but `06` and `07` are the two rows to re-read first on the next run, since this
+is the first run in which those graders count.
 
 A later review added two more, on the same 1.7.1: Perspective C now says that a
 path the document creates **anywhere** is in the creation group for the whole
