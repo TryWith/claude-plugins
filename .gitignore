@@ -6,3 +6,6 @@ node_modules/
 
 # superpowers-generated design documents (spec / plan) are not committed
 docs/superpowers/
+
+# claude plugin eval output; copy the numbers into plugins/forge/evals/BASELINE.md instead
+plugins/forge/evals/results/

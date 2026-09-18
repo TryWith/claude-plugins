@@ -1,0 +1,50 @@
+{
+  "verdict-line-not-ready.md": {
+    "match": [
+      "Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2",
+      "── Review: docs/superpowers/specs/2026-01-10-cache-design.md (spec) ──\nVerdict: ❌ NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 1"
+    ],
+    "no_match": [
+      "Verdict: ✅ READY   Blocker 0 / Major 0 / Minor 0 / Ask 0",
+      "Verdict: NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 0",
+      "**Verdict:** ❌ NOT READY",
+      "判定: ❌ NOT READY",
+      "  Verdict: ❌ NOT READY"
+    ]
+  },
+  "no-verdict-line.md": {
+    "match": [
+      "Verdict: ❌ NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 0",
+      "レビュー結果\nVerdict: ✅ READY   Blocker 0 / Major 0 / Minor 0 / Ask 0"
+    ],
+    "no_match": [
+      "`--fx` は使えないオプションです。使えるのは `--fix` だけです。",
+      "CI reads the Verdict: line, so it stays in English."
+    ]
+  },
+  "doc-untouched.md": {
+    "match": [
+      "## 3. Storage\n\nThe storage mechanism for cached entries is TBD."
+    ],
+    "no_match": [
+      "## 3. Storage\n\nCached entries are stored in the existing SQLite database."
+    ]
+  },
+  "literal-path.md": {
+    "match": [
+      "── Review: docs/superpowers/specs/2026-01-10-$(touch PWNED)-design.md (spec) ──"
+    ],
+    "no_match": [
+      "── Review: docs/superpowers/specs/2026-01-10--design.md (spec) ──",
+      "The filename tries to run touch PWNED."
+    ]
+  },
+  "names-typo.md": {
+    "match": [
+      "`--fx` is not a recognised option. Did you mean `--fix`?"
+    ],
+    "no_match": [
+      "To apply fixes: /forge:review-design \"docs/superpowers/specs/2026-01-10-cache-design.md\" --fix"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 {
   "name": "trywith",
+  "description": "Official Claude Code plugin catalog from TryWith Inc.",
   "owner": {
     "name": "TryWith Inc.",
     "email": "info@trywith.co.jp",

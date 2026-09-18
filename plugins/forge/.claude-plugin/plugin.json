@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "1.6.6",
+  "version": "1.7.1",
   "description": "Workflow plugin that reviews superpowers design documents, then orchestrates commit-push-pr / code-review --fix / conditional security-review and watches CI / review status after PR creation, auto-fixing issues until ready to merge.",
   "author": {
     "name": "TryWith Engineering",
@@ -20,8 +20,5 @@
     "spec",
     "design-review"
   ],
-  "license": "Apache-2.0",
-  "components": {
-    "commands": ["commands/"]
-  }
+  "license": "Apache-2.0"
 }
