@@ -7,6 +7,10 @@ set -euo pipefail
 git init -q
 git config user.name fixture
 git config user.email fixture@example.invalid
+# The scaffold inherits the operator's global git config. A global
+# `commit.gpgsign = true` makes the commit below fail under `set -e`, which
+# aborts the scaffold and errors the case at $0.00 on that machine alone.
+git config commit.gpgsign false
 mkdir -p design
 
 cat > design/cache-notes-design.md <<'EOF'

@@ -151,6 +151,15 @@ line that failed that test. Word-boundary matching is not an alternative:
 failing verdict just as `grep READY` does. The order of the two tests is the
 whole mechanism.
 
+**The line starts with `V`, and nothing else.** No bold, no heading marker, no
+bullet, no blockquote, no leading spaces — a caller matches it at the start of a
+line, and `**Verdict: ❌ NOT READY**` does not start with `Verdict:`. Markdown
+emphasis around the line is the one decoration that looks harmless and is not:
+it has been observed, it moves the first character, and it costs the caller the
+whole verdict. Rendering the report block as preformatted text is fine — the
+fence sits on its own line and the verdict still begins its own — but nothing
+may precede `Verdict:` on the verdict line itself.
+
 A report-only run emits exactly **one** `Verdict:` line, which is the other
 half of why it is the mode to gate on. A `--fix` run emits one per pass —
 Section 8 re-emits Section 5's report on every re-review — plus the one in its
@@ -220,7 +229,7 @@ J Acceptance     ⚠️ Major 1
   → no effect on implementation
   Disposition: Fix now (unify terminology)
 
-→ To apply fixes: /forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+→ To apply fixes: /forge:review-design "docs/superpowers/specs/2026-08-29-foo-design.md" --fix
 ```
 
 Rules for the header block:

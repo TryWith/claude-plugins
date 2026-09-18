@@ -162,17 +162,45 @@ already answered — and their outputs concatenate with nothing to separate them
 leaving the rule below, which turns on *which stage* a candidate came from,
 nothing to read.
 
-When Stage 3 is issued in the **merged** form Perspective C describes — Section 3
-says to issue it here, so the repository is walked once rather than twice — its
-output also carries the `CLAUDE.md` / `CLAUDE.local.md` hits that the other half
-of the merge is for. **Those are never design-document candidates.** Separate
-them out by filename before applying any rule below, and keep them for
-Perspective C. Without this, a repository that has a root `CLAUDE.md` and no
-design documents at all gets `./CLAUDE.md` as its only Stage 3 line, *stop at
-the first stage that prints any line* takes it as the candidate, and the "every
-stage came up empty" branch below — the one that tells the user to pass an
-explicit path — never fires. The user is offered their conventions file as the
-document to review.
+**Stage 3 is issued in the merged form below**, never in the plain form printed
+above. Perspective C has to walk the whole repository as well, for the
+`CLAUDE.md` / `CLAUDE.local.md` files it reads, and Section 3 says to issue that
+walk *here* so the repository is traversed once rather than twice. The command
+is written out here, at the point it is issued, rather than described: merging
+it by hand is a trap. `find`'s implicit `and` binds tighter than `-o`, so
+pasting `-o -name 'CLAUDE.md'` onto the end of Stage 3's expression detaches it
+from the leading `-type f` **and** leaves `-print` attached to that last
+alternative alone — the command then prints only the `CLAUDE.local.md` hits and
+none of the `*.md` candidates, which in a repository with no `CLAUDE.local.md`
+is no output at all, indistinguishable from a clean search. Both `CLAUDE.md` and
+`CLAUDE.local.md` already match `-name '*.md'`, so the extra alternatives belong
+**inside** the existing parenthesised group, not beside it:
+
+```bash
+# Same root as both halves it merges — Perspective C's own CLAUDE.md `find`
+# inherits the `cd` at the top of that block, and the staged search does its
+# own. Without it a run from a subdirectory never sees the repository-root
+# CLAUDE.md, the one file that perspective is told to read first.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
+  -type f -name '*.md' \
+  \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \
+     -o -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) \
+  -print 2>/dev/null | sort
+```
+
+Carry both sets of hits forward: Perspective C re-uses this output instead of
+running its own walk.
+
+Because Stage 3 is issued that way, its output also carries the `CLAUDE.md` /
+`CLAUDE.local.md` hits that the other half of the merge is for. **Those are
+never design-document candidates.** Separate them out by filename before
+applying any rule below, and keep them for Perspective C. Without this, a
+repository that has a root `CLAUDE.md` and no design documents at all gets
+`./CLAUDE.md` as its only Stage 3 line, *stop at the first stage that prints
+any line* takes it as the candidate, and the "every stage came up empty"
+branch below — the one that tells the user to pass an explicit path — never
+fires. The user is offered their conventions file as the document to review.
 
 **The same trap has a second door, and this repository falls through it.**
 `*design*` matches every file of this command: `SKILL.md` and each file under

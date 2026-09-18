@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There is no application code or build pipeline** — every "command" is a markdown file that Claude reads and interprets at invocation time. Behaviour is checked by an eval suite under `plugins/forge/evals/` (see *Validation*). Currently ships one plugin: `forge`.
+A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There is no build pipeline** — every "command" is a markdown file that Claude reads and interprets at invocation time, and the only executable code in the repository is the eval suite's fixtures and its grader-pattern checker. Behaviour is checked by an eval suite under `plugins/forge/evals/` (see *Validation*). Currently ships one plugin: `forge`.
 
 ## Repository layout
 
@@ -18,7 +18,15 @@ A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There 
 ```bash
 jq -e . .claude-plugin/marketplace.json
 jq -e . plugins/<name>/.claude-plugin/plugin.json
+node plugins/forge/evals/check-patterns.mjs
 ```
+
+The third one is free and takes a second. Run it after **any** edit under
+`plugins/forge/evals/` — it is the only check that catches a mistyped `regex`
+grader (a `not_contains` pattern that matches nothing passes every eval run,
+broken or not) and the only one that catches a shared `fixture.sh` or grader
+copy that has drifted from its siblings. A full eval run costs about $20 and
+nobody runs one for a one-line grader edit; this is what stands in for it.
 
 ### Evals
 

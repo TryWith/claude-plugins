@@ -121,36 +121,20 @@ PATHS
 # the `Spec:` lookup does for a plan given by explicit path. When this run has
 # to do both, issue them as one walk: same prune, same root, one traversal, and
 # the CLAUDE.md hits are told apart from the `*.md` candidates by their
-# filename. Section 2 gets there first, so the merge happens *there* — issue
-# the merged form below in place of Stage 3's `find` and keep both sets of
-# hits. Arriving here with that output already in hand, re-use it; running the
-# `find` above as well is the second traversal the merge exists to avoid.
+# filename. Section 2 gets there first, so the merge happens *there*: the
+# merged form is written out beside Stage 3 and issued in place of it, and both
+# sets of hits are carried here. Arriving with that output already in hand,
+# re-use it; running the `find` below as well is the second traversal the merge
+# exists to avoid.
 find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
   -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) -print 2>/dev/null
 ```
 
-The merged form is written out below rather than described, because merging it
-by hand is a trap: `find`'s implicit `and` binds tighter than `-o`, so pasting
-`-o -name 'CLAUDE.md'` onto the end of Stage 3's expression detaches it from
-the leading `-type f` **and** leaves `-print` attached to that last alternative
-alone — the command then prints only the `CLAUDE.local.md` hits and none of the
-`*.md` candidates, which in a repository with no `CLAUDE.local.md` is no output
-at all, indistinguishable from a clean search. Both `CLAUDE.md` and `CLAUDE.local.md` already match
-`-name '*.md'`, so the extra alternatives belong **inside** the existing
-parenthesised group, not beside it:
-
-```bash
-# Same root as both halves it merges — the CLAUDE.md `find` above inherits the
-# `cd` at the top of that block, and the staged search does its own. Without it
-# a run from a subdirectory never sees the repository-root CLAUDE.md, the one
-# file this perspective is told to read first.
-FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
-find . \( -type d \( -name '.?*' -o -name node_modules \) \) -prune -o \
-  -type f -name '*.md' \
-  \( -path '*/specs/*' -o -path '*/plans/*' -o -path '*design*' -o -path '*plan*' \
-     -o -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \) \
-  -print 2>/dev/null | sort
-```
+The merged command itself is written out in Section 2's staged search, beside
+Stage 3 — the point at which it is issued — rather than here, where it would be
+a second copy of the same command reached after the walk it replaces has already
+run. It is written out there rather than described because merging it by hand is
+a trap; the explanation is next to it.
 
 Read the root file, every file the `find` reported that governs a directory the
 document touches — a nested one only applies to files at or below it — and

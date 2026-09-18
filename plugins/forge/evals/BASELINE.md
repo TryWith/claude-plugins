@@ -280,3 +280,23 @@ covered by this result; both need fixtures in stage 2b. After this run,
 commit 71392f0 reworded SKILL.md's checklist step 4 so a report-only `READY`
 plan reads that handoff block in `references/4-fix.md`; the change is to the
 checklist only, C1 still passes, and it was not re-evaluated.
+
+A second gap in this result: only `01` and `05` assert that the target file is
+unchanged (`doc-untouched`). `02`, `03`, `04` and `08` are report-only runs too,
+and the "never writes to the target file" contract holds for them just as much,
+but nothing in those cases would notice a run that edited the document. Add the
+grader to them in stage 2b — it needs its own baseline row, which is why it is
+recorded here rather than added against this table. Note also that
+`allowed_tools` grants no `Write` or `Edit`, so even where `doc-untouched` does
+run it only rules out a write through `Bash`.
+
+**Post-run edits, not re-evaluated.** A review after the stage 2a run changed
+the skill text: the merged Stage 3 / `CLAUDE.md` `find` moved from
+`references/2-review.md` into `references/1-resolve.md`, beside the Stage 3 it
+replaces (it was previously written out in a file the checklist does not open
+until after target resolution has run, so the second traversal it exists to
+avoid happened anyway); `references/3-verdict.md` gained a rule that nothing may
+precede `Verdict:` on the verdict line, which is the root cause of the bolded
+line recorded above; and Section 5's `--fix` hint example now quotes the path,
+as the rule beside it already required. Version bumped to 1.7.1 for the run that
+verifies them.

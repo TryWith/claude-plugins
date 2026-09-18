@@ -23,14 +23,20 @@ import { fileURLToPath } from 'node:url';
 const evalDir = path.resolve(process.argv[2] ?? path.dirname(fileURLToPath(import.meta.url)));
 const failures = [];
 
+function caseDirs() {
+  return fs.readdirSync(evalDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== 'results' && e.name !== 'mocks')
+    .map((e) => e.name)
+    .sort();
+}
+
 function graderFiles() {
   const files = [];
-  for (const entry of fs.readdirSync(evalDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === 'results' || entry.name === 'mocks') continue;
-    const dir = path.join(evalDir, entry.name, 'graders');
+  for (const name of caseDirs()) {
+    const dir = path.join(evalDir, name, 'graders');
     if (!fs.existsSync(dir)) continue;
-    for (const name of fs.readdirSync(dir).sort()) {
-      if (name.endsWith('.md')) files.push(path.join(dir, name));
+    for (const file of fs.readdirSync(dir).sort()) {
+      if (file.endsWith('.md')) files.push(path.join(dir, file));
     }
   }
   return files;
@@ -48,6 +54,39 @@ function parse(file) {
 }
 
 const rel = (file) => path.relative(evalDir, file).split(path.sep).join('/');
+
+// `fixture.sh` is duplicated the same way the graders are, and for the same
+// reason — `claude plugin eval` reads a scaffold script per case. A shared
+// fixture says so in its header comment ("Shared verbatim by A, B and C"), and
+// that declaration is the only thing standing between the copies and silent
+// drift, so check it here rather than trusting the comment.
+function checkFixtures() {
+  for (const name of caseDirs()) {
+    const file = path.join(evalDir, name, 'fixture.sh');
+    if (!fs.existsSync(file)) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    const header = text.split('\n').filter((l) => l.startsWith('#')).join('\n');
+    const at = header.indexOf('Shared verbatim by');
+    if (at === -1) continue;
+    const declared = [...new Set(header.slice(at).match(/\b\d{2}-[a-z0-9-]+\b/g) ?? [])];
+    if (!declared.includes(name)) {
+      failures.push(`${name}/fixture.sh: "Shared verbatim by" does not list its own case`);
+      continue;
+    }
+    const body = fs.readFileSync(file);
+    for (const other of declared) {
+      if (other === name) continue;
+      const otherFile = path.join(evalDir, other, 'fixture.sh');
+      if (!fs.existsSync(otherFile)) {
+        failures.push(`${name}/fixture.sh: names ${other}, which has no fixture.sh`);
+      } else if (!fs.readFileSync(otherFile).equals(body)) {
+        failures.push(`${other}/fixture.sh: differs from ${name}/fixture.sh — shared fixtures must be identical copies`);
+      }
+    }
+  }
+}
+
+checkFixtures();
 
 // Group by file name; the first copy of each name is the one checked.
 const byName = new Map();
@@ -82,7 +121,11 @@ for (const [name, files] of byName) {
   }
   let re;
   try {
-    re = new RegExp(parsed.body, parsed.fields.flags ?? '');
+    // Drop `g` and `y`: one `RegExp` is reused across every sample below, and
+    // those two flags make `test()` stateful through `lastIndex`, so samples
+    // would pass or fail by position. Neither changes whether the pattern
+    // matches at all, which is all this check is about.
+    re = new RegExp(parsed.body, (parsed.fields.flags ?? '').replace(/[gy]/g, ''));
   } catch (err) {
     failures.push(`${rel(files[0])}: pattern does not compile: ${err.message}`);
     continue;
