@@ -4,6 +4,9 @@
 # existing, and a dependency CLAUDE.md forbids). Shared verbatim by
 # 01-spec-defects, 05-typo-flag and 06-neg-explain — each fixture.sh stays
 # self-contained, so a change here has to be copied to the other two.
+# `Shared verbatim by` is an identifier, not prose: `evals/check-patterns.mjs`
+# matches that phrase in this leading comment block to find the group and
+# compare the copies byte for byte. Reword it and the check stops running.
 # Writes only inside the current directory.
 set -euo pipefail
 git init -q

@@ -183,8 +183,9 @@ After writing, continue to Section 8.
 If Section 7 wrote nothing, there is normally nothing to re-review: the file is
 byte for byte what Section 3 already read, so another pass can only reproduce
 the report you just emitted. Print this arrival's `pass n/3` line the same as any
-other arrival, then skip straight to *Completion output* below, carrying the
-verdict you already have.
+other arrival, then — unless the exception in the next paragraph applies, which
+you read before acting on this one — skip straight to *Completion output*
+below, carrying the verdict you already have.
 
 **Unless the run itself learned something the last report did not have.** That
 justification is about the *file*, and one answer changes the review without

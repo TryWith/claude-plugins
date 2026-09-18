@@ -16,6 +16,11 @@
 // reads graders per case, with no suite-wide sharing. Copies drift, so every
 // grader file (of any type) that shares a name with another must be
 // byte-identical to it, and the samples are keyed by that shared name.
+//
+// It also checks the frontmatter of every grader and every `prompt.md` against
+// the harness's schema, and that a shared `fixture.sh` matches its siblings.
+// Those three are cheap here and cost about $20 there: each is refused key by
+// key, so one typo errors the whole case rather than failing one grader.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +52,13 @@ function parse(text) {
   if (!m) return null;
   const fields = {};
   for (const line of m[1].split('\n')) {
-    const kv = line.match(/^([a-z_]+):\s*(.*)$/);
+    // The key is **any** run of non-space, non-colon characters, not just
+    // `[a-z_]+`. The narrower pattern skipped every key it could not spell —
+    // `input-match:`, `Match:`, `max2:` — so the unknown-field check below, the
+    // whole reason this function collects the fields, never saw the misspelling
+    // that `claude plugin eval`'s strict schema then refuses the case over.
+    // Silently dropping a key is the one outcome worse than reporting it.
+    const kv = line.match(/^([^\s:]+):\s*(.*)$/);
     if (kv) fields[kv[1]] = kv[2].trimEnd().replace(/^["']|["']$/g, '');
   }
   return { fields, body: m[2].trim() };
@@ -80,6 +91,10 @@ const GRADER_FIELDS = {
   llm: ['type', 'name', 'focus', 'weight', 'arm'],
   baseline: ['type', 'name', 'baseline_file', 'weight', 'arm'],
 };
+
+// Which required field each type takes from the body below the frontmatter.
+// A type absent from this map reads no body.
+const BODY_FIELD = { regex: 'pattern', llm: 'criteria', baseline: 'criteria' };
 
 // A target is one of those four words, or a `{source: file, path: …}` mapping.
 const badTarget = (v) =>
@@ -153,16 +168,40 @@ function checkFields(where, fields) {
 // fixtures write through heredocs (`## 1. Goal`, `# Pricing service`), and the
 // case-name scan below would then read a heading such as `## 10-minute TTL` as a
 // sibling case and fail a correct suite.
+//
+// Returned **flattened to one line**: each line's `#` stripped and the lines
+// joined with a single space. The marker and the case names after it are prose,
+// and prose wraps — `03-companion-spec`'s fixture broke `Shared verbatim by`
+// across two `#` lines, so a search over the raw block found nothing, the
+// fixture took the "declares no group" branch, and all three copies of that
+// fixture were silently exempt from the comparison this file exists to run,
+// while it still printed success.
 function leadingComment(text) {
   const lines = [];
   for (const line of text.split('\n')) {
     if (line.startsWith('#!')) continue;
     if (line.trim() === '') continue;
     if (!line.startsWith('#')) break;
-    lines.push(line);
+    lines.push(line.replace(/^#+[ \t]?/, '').trim());
   }
-  return lines.join('\n');
+  return lines.join(' ');
 }
+
+// Every `#` line in the file, flattened the same way. Used for one question
+// only — "is the marker somewhere else in this file?" — where sweeping in a
+// heredoc's markdown headings cannot cause a false case name.
+function allComments(text) {
+  return text
+    .split('\n')
+    .filter((line) => line.startsWith('#') && !line.startsWith('#!'))
+    .map((line) => line.replace(/^#+[ \t]?/, '').trim())
+    .join(' ');
+}
+
+// The marker is matched on whitespace rather than as a fixed string, so a
+// re-wrapped comment keeps working. It is a machine-read identifier: the
+// fixtures say so in their own headers, beside the phrase.
+const MARKER = /Shared\s+verbatim\s+by/;
 
 function checkFixtures() {
   const fixtures = new Map();
@@ -174,10 +213,16 @@ function checkFixtures() {
   for (const [name, body] of fixtures) {
     const text = body.toString('utf8');
     const header = leadingComment(text);
-    const at = header.indexOf('Shared verbatim by');
+    const at = header.search(MARKER);
     if (at === -1) {
-      if (text.includes('Shared verbatim by')) {
+      if (MARKER.test(allComments(text))) {
         failures.push(`${name}/fixture.sh: "Shared verbatim by" must sit in the leading comment block`);
+      } else if (/\bshared\b/i.test(header)) {
+        // A reworded marker is indistinguishable from "this fixture is not
+        // shared", and the group it named then stops being compared with no
+        // output at all. Anything that calls itself shared has to use the
+        // phrase this file greps for.
+        failures.push(`${name}/fixture.sh: its header calls the fixture shared but does not use the exact phrase "Shared verbatim by", which is what names the group — reworded, the drift check silently stops running`);
       }
       continue;
     }
@@ -230,7 +275,34 @@ function checkFixtures() {
   }
 }
 
+// `prompt.md`'s frontmatter is refused key by key, and by name: an unrecognised
+// key is not ignored, it errors the case ("unknown frontmatter key"). The two
+// sets below are the harness's own — a top-level group and an execution group,
+// merged from the same file — so `max_turn:` or `allowed-tools:` costs the run
+// exactly what a misspelt grader field does.
+const PROMPT_TOP = ['schema_version', 'name', 'description', 'tags', 'plugins', 'runs', 'expected_outcome'];
+const PROMPT_EXECUTION = ['model', 'max_turns', 'timeout_seconds', 'allowed_tools', 'artifact_publish',
+  'growthbook_overrides', 'append_system_prompt', 'env'];
+
+function checkPrompts() {
+  for (const name of caseDirs()) {
+    const file = path.join(evalDir, name, 'prompt.md');
+    if (!fs.existsSync(file)) continue;
+    const parsed = parse(fs.readFileSync(file, 'utf8'));
+    // No frontmatter at all is legal — every key has a default, or comes from
+    // case.yaml — so there is nothing to check.
+    if (!parsed) continue;
+    for (const key of Object.keys(parsed.fields)) {
+      if (!PROMPT_TOP.includes(key) && !PROMPT_EXECUTION.includes(key)) {
+        failures.push(`${name}/prompt.md: unknown frontmatter key \`${key}\` — allowed: ${[...PROMPT_TOP, ...PROMPT_EXECUTION].join(', ')}`);
+      }
+    }
+    if (parsed.body === '') failures.push(`${name}/prompt.md: empty body — the prompt is what the case runs`);
+  }
+}
+
 checkFixtures();
+checkPrompts();
 
 // Group by file name; the first copy of each name is the one checked.
 const byName = new Map();
@@ -258,12 +330,20 @@ for (const [name, files] of byName) {
     continue;
   }
   checkFields(rel(files[0]), parsed.fields);
-  if (parsed.fields.type !== 'regex') continue;
-  seen.add(name);
-  if (parsed.body === '') {
-    failures.push(`${rel(files[0])}: empty pattern (the body below the frontmatter)`);
+  // Claimed before the body check below, so a regex grader that fails that
+  // check does not also collect a "has samples but no regex grader" failure
+  // from the sweep at the end for the same one defect.
+  if (parsed.fields.type === 'regex') seen.add(name);
+  // The body fills one required schema field, and which one depends on the
+  // type. An empty body leaves that field unset, and the schema has no default
+  // for it, so the case is refused — the same $20 error a misspelt field
+  // causes. `tool_used` and `file_exists` read no body at all.
+  const bodyField = BODY_FIELD[parsed.fields.type];
+  if (bodyField !== undefined && parsed.body === '') {
+    failures.push(`${rel(files[0])}: empty body — this \`${parsed.fields.type}\` grader's \`${bodyField}\` is read from the body below the frontmatter, and the schema requires it`);
     continue;
   }
+  if (parsed.fields.type !== 'regex') continue;
   let re;
   try {
     // Drop `g` and `y`: one `RegExp` is reused across every sample below, and

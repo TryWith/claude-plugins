@@ -292,7 +292,12 @@ unchanged (`doc-untouched`). `02`, `03`, `04` and `08` are report-only runs too,
 and the "never writes to the target file" contract holds for them just as much,
 but nothing in those cases would notice a run that edited the document. Add the
 grader to them in stage 2b — it needs its own baseline row, which is why it is
-recorded here rather than added against this table. Note also that
+recorded here rather than added against this table. It cannot be added under
+the name `doc-untouched.md`: `check-patterns.mjs` requires every grader file
+sharing a basename to be a byte-identical copy, and each of those four cases
+targets a different document (`02`'s spec carries the injected filename, `03`
+and `08` target a plan, `04` a note outside `specs/`), so the `target:` path
+differs case by case. Give each one a distinct file name. Note also that
 `allowed_tools` grants no `Write` or `Edit`, so even where `doc-untouched` does
 run it only rules out a write through `Bash`.
 
