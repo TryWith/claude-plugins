@@ -70,7 +70,7 @@ finding always wins over the table.
 
 | Label | Condition | Effect |
 |-------|-----------|--------|
-| `Fix now` | The answer is uniquely determined — the finding's *proposed text* is one replacement | Applied automatically under `--fix` |
+| `Fix now` | The answer is uniquely determined — the finding's *proposed text* is one replacement | Put to the user as *apply / keep the document as written*; applied when they take it |
 | `Ask` | A design decision is required — the *proposed text* is a set of choices. Perspective C mismatches go here by default | Put to the user as a multiple-choice question |
 | `Reject` | False positive — a finding Section 3's *Challenge every finding* refuted | Reported with a one-line reason |
 
@@ -137,7 +137,7 @@ row, and those carry no count. Otherwise the row would say "not checked" while
 holding a `Blocker`, and Section 5's rule that the verdict counts equal the sum
 of the per-perspective counts would have nothing to reconcile against.
 
-Without `--fix` no `Ask` is ever put to the user, so any `Ask` at all leaves the
+On a report-only run no `Ask` is ever put to the user, so any `Ask` at all leaves the
 verdict at `NOT READY`. That is correct: "there are design decisions still
 yours to make" is not a ready state.
 
@@ -168,11 +168,11 @@ fence sits on its own line and the verdict still begins its own — but nothing
 may precede `Verdict:` on the verdict line itself.
 
 A report-only run emits exactly **one** `Verdict:` line, which is the other
-half of why it is the mode to gate on. A `--fix` run emits one per pass —
-Section 8 re-emits Section 5's report on every re-review — plus the one in its
-completion output, so the run's verdict is the **last** `^Verdict:` line, never
-the first. A caller that reads the first match on a `--fix` run reads the
-verdict from before any fix was applied.
+half of why it is the mode to gate on. An interactive run emits one per pass —
+Section 8 re-emits Section 5's compact header on every re-review — plus the
+one in its completion output, so the run's verdict is the **last** `^Verdict:`
+line, never the first. A caller that reads the first match on an interactive
+run reads the verdict from before any fix was applied.
 
 ### What to carry forward
 
@@ -205,7 +205,54 @@ and disposition labels are **not** keys: Section 4 has them emitted in the
 conversation's language, one fixed word each, and the example below shows them
 in English only because this file is written in English.
 
+### Two shapes
+
+Section 5 has two shapes, and `INTERACTIVE` picks one:
+
+- `INTERACTIVE` is `0` — the **full report** under *Structure* below: header
+  block, challenge line, every finding with its three lines, the hint. It is
+  the whole output of a report-only run, and it is also what an interactive run
+  prints when the user asks for it from Section 6's entry card or when a
+  question is refused (Section 6) — in both of those cases without the hint.
+- `INTERACTIVE` is `1` — the **compact header**: the same opening lines — the
+  `── Review:` line, the verdict line, the header block, the challenge line —
+  followed by the `Reject` entries alone, each as its heading and `Problem:`
+  line, under a `[Rejected]` heading that is omitted when there are none. No
+  `[Findings]` list and no hint: the findings are about to be put to the user
+  one by one, and printing them first is the wall the cards replace. Section 6
+  takes over from the compact header.
+
+```
+── Review: docs/superpowers/specs/2026-08-29-foo-design.md (spec) ──
+Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2
+
+A Completeness   ⚠️ Blocker 1 / Minor 1
+B Consistency    ⚠️ Blocker 1 / Minor 1
+C Repo Grounding ⚠️ Major 1
+D Blind Spots    ⚠️ Major 2
+E Buildability   — not applicable (spec)
+F Scope          ✓ clean
+G Assumptions    ✓ clean
+H Alternatives   ⚠️ Minor 1
+I YAGNI          ✓ clean
+J Acceptance     ⚠️ Major 1
+
+Challenged: 10 findings / rejected 1
+
+[Rejected]
+[Reject] §4 C Repo Grounding
+  Problem: Flagged `src/db/sqlite.ts` as missing; it exists (`ls src/db/`).
+```
+
+The verdict line is identical in both shapes, and Section 4's rules for it
+bind both: a CI job reading an interactive run's transcript finds the same
+`Verdict:` line in the same place. Every rule under *Rules for the header
+block* below applies to the compact header too, except the ones about the
+findings list and the hint, which it does not print.
+
 ### Structure
+
+The full report:
 
 ```
 ── Review: docs/superpowers/specs/2026-08-29-foo-design.md (spec) ──
@@ -247,7 +294,7 @@ Challenged: 10 findings / rejected 1
 [Reject] §4 C Repo Grounding
   Problem: Flagged `src/db/sqlite.ts` as missing; it exists (`ls src/db/`).
 
-→ To apply fixes: /forge:review-design "docs/superpowers/specs/2026-08-29-foo-design.md" --fix
+→ To work through these interactively: /forge:review-design "docs/superpowers/specs/2026-08-29-foo-design.md"
 ```
 
 Rules for the header block:
@@ -279,8 +326,8 @@ Rules for the header block:
   English string exists for
 - Every finding appears in the findings list, not just the ones shown in the
   example above — the example is abridged
-- The header line names `TARGET_FILE` in full, and the `--fix` hint repeats it
-  verbatim. A bare `/forge:review-design --fix` re-runs the staged search and
+- The header line names `TARGET_FILE` in full, and the hint repeats it
+  verbatim. A bare `/forge:review-design` re-runs the staged search and
   can land on a different document than the one this report is about. Wrap the
   path in **double quotes**, escaping any `"` in it as `\"` and any `\` as
   `\\` — Section 1 decodes exactly that, so one form covers every path with no
@@ -294,11 +341,15 @@ Rules for the header block:
   that way does not survive being typed back in. The two lines go to different
   readers, so they take different quoting — matching their shapes to each other
   is what breaks one of them
-- **The hint is printed only when `FIX_MODE` is `0` and the report carries at
-  least one `Fix now` or `Ask`.** A run that is already applying fixes must not
-  tell the reader to pass `--fix`, and neither must a report with nothing for a
-  fix pass to do — on a `READY` report with no findings, `--fix` would re-read
-  the document, ask nothing, write nothing and re-emit this same report
+- **The hint is printed only when `INTERACTIVE` is `0` because `--report-only`
+  was passed or the question tool is unavailable, and the report carries at
+  least one `Fix now` or `Ask`.** An interactive run printing the full report
+  from its entry card is already interactive and must not tell the reader to
+  start one; a run that fell back because a question was refused cannot offer
+  one either (Section 6); and a report with nothing to decide has nothing for
+  the cards to do — on a `READY` report with no findings, an interactive run
+  would re-read the document, ask nothing, write nothing and print this same
+  header
 
 Each finding is a heading line and three labelled lines under it. The heading
 is `[Severity] location Perspective — Disposition`: the disposition sits on the
@@ -340,21 +391,21 @@ could not be found, say so **above** the verdict line.
 
 ### Where to stop
 
-When `FIX_MODE` is `0`, the report is the whole output. **Do not modify the
-target file, and do not ask the user anything** — everything from here on is
-report generation, and a report that cannot alter its subject and cannot block
-on an answer is what makes an unattended run possible. Target resolution back
-in Section 2 is the only step that can ask, and only for a path that is not
-self-typing. Print the `--fix` hint — subject to the condition in *Rules for
-the header block* above, which is the only place that decides whether it is
-printed at all — and stop.
+When `INTERACTIVE` is `0`, the full report is the whole output. **Do not
+modify the target file, and do not ask the user anything** — everything from
+here on is report generation, and a report that cannot alter its subject and
+cannot block on an answer is what makes an unattended run possible. Target
+resolution back in Section 2 is the only step that can ask, and only for a
+path that is not self-typing. Print the hint — subject to the condition in
+*Rules for the header block* above, which is the only place that decides
+whether it is printed at all — and stop.
 
-When `FIX_MODE` is `1`, continue to Section 6.
+When `INTERACTIVE` is `1`, print the compact header and continue to Section 6.
 
 One thing does still follow the report on the report-only exit: when
 `DOC_TYPE` is `plan` and `VERDICT` is `READY`, emit Section 8's *Handing off to
 implementation* block before stopping. Report-only is the mode a gate runs in,
 so it is the mode most likely to produce the `READY` plan that block exists
-for; leaving it reachable only under `--fix` hides the next step from every run
+for; leaving it reachable only on an interactive run hides the next step from every run
 that had nothing to fix.
 
