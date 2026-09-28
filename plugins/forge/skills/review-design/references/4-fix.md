@@ -67,7 +67,7 @@ at all, which is where most of D, G, H, I and J land, and **both** of Section
 4's degradation findings are `§whole` `Ask`s. Dropping them would leave the
 two findings that exist to keep a degraded review off `READY` as the only ones
 the user is never asked about, and would make Section 7's precondition —
-every `Ask` answered — impossible to satisfy.
+every question answered — impossible to satisfy.
 
 When `FORMAT_OK` is `0` there are no sections to walk at all. Every finding is
 then located either by `§whole` or by a quoted line, so there is nothing for
@@ -75,8 +75,8 @@ the walk to visit: put them all on cards in `ASK_ITEMS` order — the same
 ordering applied to `FIX_ITEMS`, the two interleaved by location — under the same
 four-question limit — the `§whole` ones on the first card as above, then the
 line-located ones in file order. Without this the walk reaches none of them in
-a formatless document, and Section 7's precondition — every `Ask` answered —
-could never be met, on the one document that always carries at least one
+a formatless document, and Section 7's precondition — every question
+answered — could never be met, on the one document that always carries at least one
 `Ask` (Section 4's `FORMAT_OK` degradation).
 
 Grouping by section keeps related questions together, and most documents only
@@ -92,7 +92,8 @@ the finding behind it.
 
 Every question shows the finding as the report would: its heading line, then
 `Problem:`, `Before:` and `After:` — the reader decides from the same three
-lines Section 5 prints, never from a summary of them.
+lines Section 5 prints, never from a summary of them, and under the same
+labels in the conversation's language that Section 5 chose.
 
 A `Fix now` question has two choices: **Apply** (recommended) — write the
 `After:` text in place of the `Before:` text — and **Keep the document as
@@ -105,8 +106,10 @@ question — the harness always offers it.
 
 Every question offers between two and four choices. **Keep the document as
 written** — leave it alone, and say plainly that the finding stays unresolved
-and the verdict stays `NOT READY` — is one of them on **every** question,
-without exception.
+and counted, and that a `Blocker`, a `Major` or an `Ask` kept this way holds
+the verdict at `NOT READY` (a kept `Minor` `Fix now` alone does not: Section
+4's formula never counted it) — is one of them on **every** question, without
+exception.
 
 When the finding is a Perspective C mismatch, one of the other choices must be
 **Match the repository** — change the document to agree with what is actually
@@ -218,8 +221,10 @@ Rules:
   The finding stays open.
 - A `Reject` produces no edit.
 - A `Fix now` answered **Keep the document as written** produces no edit
-  either. It stays open and counted, exactly as a declined `Ask` does, and is
-  listed under *Kept as written* in the completion output.
+  either. It stays open and counted at its severity — a kept `Blocker` or
+  `Major` holds the verdict at `NOT READY`, a kept `Minor` alone leaves
+  Section 4's formula where it was — and is listed under *Kept as written* in
+  the completion output.
 - A `Fix now` is applied as the finding's *proposed text* — the lines the
   report's `After:` showed, in place of its `Before:`. The report is the
   preview of this pass; an edit that differs from it is one the user never saw.
@@ -437,12 +442,15 @@ Emit four things:
 2. A bulleted summary of what changed
 3. A bulleted list of what the user kept as written — every finding answered
    *Keep the document as written*, `Ask` or `Fix now`, with its disposition —
-   omitted when empty
+   omitted when empty. When the verdict is `READY` and this list is not, say
+   in one line above the list that `READY` was reached with findings kept as
+   written — the same line the cap path prints — including above the
+   *Handing off to implementation* block
 4. A pointer to `git diff` for the details
 
 ```
 ── Re-review after fixes ──
-Verdict: ❌ NOT READY   Blocker 0 / Major 0 / Minor 1 / Ask 1
+Verdict: ❌ NOT READY   Blocker 0 / Major 1 / Minor 1 / Ask 1
 
 Applied:
   • §3.2  state storage: TBD → SQLite (your answer)

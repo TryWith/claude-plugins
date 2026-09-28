@@ -46,7 +46,7 @@
       "`--fx` is not a recognised option. Did you mean `--fix`?"
     ],
     "no_match": [
-      "To apply fixes: /forge:review-design \"docs/superpowers/specs/2026-01-10-cache-design.md\" --fix"
+      "To work through these interactively: /forge:review-design \"docs/superpowers/specs/2026-01-10-cache-design.md\""
     ]
   }
 }

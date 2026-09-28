@@ -88,7 +88,10 @@ For a fully unattended run pass `--report-only` and an explicit, self-typing
 path (under `specs/` or `plans/`, or ending in `-design.md`, but not carrying
 both components), since without one it may still ask which document to
 review or what type it is. `--fix` is still accepted and changes nothing —
-the interactive run is what it used to switch on.
+the interactive run is what it used to switch on. **Upgrading from 1.x:** a
+hook or CI job that ran `/forge:review-design <path>` with no flag should now
+pass `--report-only`; it keeps working without one only because a headless
+session has no question tool to fall back from.
 
 ```bash
 # Review the newest design document and work through the findings as cards.
@@ -229,7 +232,9 @@ this list applies to it.
 （`specs/` または `plans/` 配下、もしくは `-design.md` で終わるファイル名。
 ただし両方を含むパスは除く）を明示的に渡してください。渡さない場合、対象文書
 やその種別を質問することがあります。`--fix` は互換のため受け付けますが、
-動作は既定と同じです。
+動作は既定と同じです。**1.x から上げる場合:** フックや CI でフラグなしに
+`/forge:review-design <path>` を回していたなら `--report-only` を足してください。
+フラグなしでも動くのは、ヘッドレスのセッションに質問ツールが無いからにすぎません。
 
 ```bash
 # 最新の設計書をレビューし、指摘をカードで 1 件ずつ確認する。superpowers の
@@ -362,7 +367,9 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 值守地运行，请在 `--report-only` 之外显式传入类型可自行判定的路径（位于
 `specs/` 或 `plans/` 下，或文件名以 `-design.md` 结尾，但不可同时包含两者）；
 否则它仍可能询问要审查哪份文档、或它属于哪种类型。`--fix` 出于兼容仍被接受，
-但行为与默认相同。
+但行为与默认相同。**从 1.x 升级时：** 若 hook 或 CI 以前不带参数运行
+`/forge:review-design <path>`，现在请加上 `--report-only`；不加也能运行，只是
+因为无头会话没有可供回落的提问工具。
 
 ```bash
 # 审查最新的设计文档，并逐条以卡片处理发现。在 superpowers 的标准布局中，

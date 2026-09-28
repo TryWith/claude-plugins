@@ -176,8 +176,9 @@ run reads the verdict from before any fix was applied.
 
 ### What to carry forward
 
-Sections 5 to 8 consume these — Section 6 takes `ASK_ITEMS`, Section 7 takes
-`FIX_ITEMS`, and `VERDICT` is what Sections 5 and 8 report. Report them to
+Sections 5 to 8 consume these — Section 6 takes `ASK_ITEMS` and `FIX_ITEMS`
+and puts both on cards, Section 7 takes the `ANSWERS` Section 6 collected,
+and `VERDICT` is what Sections 5 and 8 report. Report them to
 yourself before emitting the report, and substitute them literally into later
 work:
 
@@ -186,11 +187,12 @@ work:
 | `VERDICT` | `READY` or `NOT READY` |
 | `PERSPECTIVE_STATUS` | One entry per perspective A–J: its severity counts, or `not applicable`, or `not checked (format)`. Section 5's header block is emitted from this and from nothing else — the findings list can tell you a perspective's counts, but nothing in it distinguishes a perspective that was skipped from one that came back clean |
 | `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to, with the `§whole` ones first. When `FORMAT_OK` is `0` a finding about specific text is located by a quoted line rather than a `§n.n`, so there is no section to order it by: order those by the line's position in the file, after the `§whole` ones |
-| `FIX_ITEMS` | Every finding whose disposition is `Fix now` |
+| `FIX_ITEMS` | Every finding whose disposition is `Fix now`, ordered exactly as `ASK_ITEMS` is — by document section with the `§whole` ones first, and by line position when `FORMAT_OK` is `0` — because Section 6 walks both lists together |
 | `CHALLENGE_COUNTS` | From Section 3's *Challenge every finding*: the number of findings challenged and the number rejected. Section 5 prints them under the header block |
 
-`ASK_ITEMS` is ordered by document section, not by severity: Section 6 walks
-the document in order and puts one card to the user per section. `§whole`
+`ASK_ITEMS` and `FIX_ITEMS` are ordered by document section, not by severity:
+Section 6 walks the document in order and puts one card to the user per
+section, carrying both lists' findings for that section. `§whole`
 items sort ahead of every section, because they belong to none and Section 6
 puts them on a card of their own before the walk starts.
 
@@ -372,6 +374,12 @@ act. The body is:
   the file and Section 7 applies exactly what was shown. For an `Ask`, the
   choices, one line each with the recommended one first — the same choices
   Section 6 puts on its card.
+
+The three field labels are labels, not keys — nothing reads `Problem:`,
+`Before:` or `After:` — so emit them in the conversation's language, one fixed
+word each, exactly as Section 4 has the severity and disposition labels
+emitted; the examples in this file keep them English only because the file
+is. Section 6's cards use the same words.
 
 Do not fold the three back into a paragraph, and do not drop `Before:` /
 `After:` from a finding that has them. The consequence is what justifies the

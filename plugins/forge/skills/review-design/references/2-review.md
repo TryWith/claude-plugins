@@ -223,36 +223,39 @@ Three challenges, each with a check you actually run:
    bullet. The most common false positive is a thing the document does say,
    somewhere the reviewer did not look. Found → `Reject`, naming where.
 
-   ```bash
-   # The quote is the document's text, so it is data: fed on stdin through a
-   # quoted heredoc, never inlined — Perspective C's rule, for its reason. So
-   # is TARGET_FILE, bound the way Section 2's `Spec:` block binds it — it
-   # never goes into a command as text — and it is repository-root-relative,
-   # so the block moves there first like every other. `-F` takes each line
-   # literally, so a paraphrased quote fails instead of matching by accident,
-   # and each line is checked on its own because the document may wrap a
-   # sentence differently from the quote: a multi-line quote passes when every
-   # line does. `ok` and `MISSING` are markers you read back out of this
-   # block's own output — keep them English.
-   FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+```bash
+# The quote is the document's text, so it is data: fed on stdin through a
+# quoted heredoc, never inlined — Perspective C's rule, for its reason. So
+# is TARGET_FILE, bound the way Section 2's `Spec:` block binds it — it
+# never goes into a command as text — and it is repository-root-relative,
+# so the block moves there first like every other. `-F` takes each line
+# literally, so a paraphrased quote fails instead of matching by accident,
+# and each line is checked on its own because the document may wrap a
+# sentence differently from the quote: a multi-line quote passes when every
+# line does. `ok` and `MISSING` are markers you read back out of this
+# block's own output — keep them English.
+# A quote line equal to `QUOTE` cannot be bound this way — `read` stops
+# there, as it does at `PATHS` in Perspective C — so check that one line
+# with the Read tool instead.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
 
-   IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
-   <the target file>
-   FORGE_TARGET_PATH
+IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
+<the target file>
+FORGE_TARGET_PATH
 
-   while IFS= read -r line; do
-     [ -n "$line" ] || continue
-     if grep -qF -- "$line" "$FORGE_TARGET"; then printf 'ok      %s\n' "$line"
-     else printf 'MISSING %s\n' "$line"; fi
-   done <<'QUOTE'
-   <the current-text lines, one per line>
-   QUOTE
-   ```
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  if grep -qF -- "$line" "$FORGE_TARGET"; then printf 'ok      %s\n' "$line"
+  else printf 'MISSING %s\n' "$line"; fi
+done <<'QUOTE'
+<the current-text lines, one per line>
+QUOTE
+```
 
-   A `MISSING` line means the quote is wrong, not yet that the finding is:
-   re-read the location, and either correct the quote to what the document
-   says or, if the text the finding describes is not there in any form,
-   `Reject` it.
+A `MISSING` line means the quote is wrong, not yet that the finding is:
+re-read the location, and either correct the quote to what the document
+says or, if the text the finding describes is not there in any form,
+`Reject` it.
 
 2. **Is the repository fact true?** A finding that rests on the repository — a
    path that "does not exist", a convention a `CLAUDE.md` "requires", a pattern
