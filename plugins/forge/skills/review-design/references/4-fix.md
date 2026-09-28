@@ -1,11 +1,13 @@
-# Resolve, apply, re-review
+# Put the findings to the user, apply, re-review
 
 ## Contents
 
-- Section 6: Resolving Ask items
+- Section 6: Putting findings to the user
+  - Entry card
   - Order: Ask before Fix now
   - One card per section
   - Building the choices
+  - When a question is refused
   - What to carry forward
 - Section 7: Applying changes
 - Section 8: Re-review and exit
@@ -14,27 +16,51 @@
   - Completion output
   - Handing off to implementation
 
-## Section 6: Resolving Ask items
+## Section 6: Putting findings to the user
 
-Reached only when `FIX_MODE` is `1`.
+Reached only when `INTERACTIVE` is `1`, from Section 5's compact header. Every
+finding that survived Section 3's challenge — `Ask` and `Fix now` alike — is
+put to the user here as a question on a card; a `Reject` never is, since
+there is nothing to choose about it and the compact header already showed it.
+
+### Entry card
+
+Before any finding is put to the user, one card with one question and three
+choices, the recommended one first:
+
+| Choice | What happens |
+|--------|--------------|
+| **Go through the findings one by one** (recommended) | Continue to the cards below |
+| **Show the full report and stop** | Print Section 5's full report — the shape with the `[Findings]` list — without its hint line, write nothing, and stop |
+| **Stop at the verdict** | Print nothing more, write nothing, and stop |
+
+Skip the entry card when no finding survived the challenge — there is nothing
+to choose — whether or not `Reject` entries were printed. The compact header
+is then the whole output, and a `READY` plan still gets Section 8's *Handing
+off to implementation* block. The card exists so that a reader who wants the
+wall can have it, and so that a run started out of habit can be left without a
+write.
 
 ### Order: Ask before Fix now
 
-Resolve every `Ask` **before** applying any `Fix now`. Design decisions cascade
-into the mechanical edits: deciding "SQLite, not Redis" changes every later
-section that mentions Redis. Applying the mechanical fixes first means redoing
-them.
+On each card, put the section's `Ask` questions before its `Fix now`
+questions, and collect every answer before applying anything. Design decisions
+cascade into the mechanical edits: deciding "SQLite, not Redis" changes every
+later section that mentions Redis. Applying the mechanical fixes first means
+redoing them — which is why Section 7 applies the whole batch at once, after
+the last card.
 
 ### One card per section
 
-Walk the document's sections in order. For each section that has `Ask` items,
-put its questions to the user as **one multiple-choice card, at most four
-questions**. Sections with no `Ask` items produce no card. If a section has
+Walk the document's sections in order. For each section that has findings —
+`Ask` and `Fix now` alike — put its questions to the user as **one
+multiple-choice card, at most four questions**. Sections with no findings
+produce no card. If a section has
 more than four, take the four highest-severity ones and put the rest on the
 next card for that section.
 
 A `§whole` finding belongs to no section, so the walk on its own would never
-reach it. Put every `§whole` `Ask` on a **first card, before the walk starts**,
+reach it. Put every `§whole` finding on a **first card, before the walk starts**,
 under the same four-question limit and the same overflow rule. This is not an
 edge case: `§whole` is the location for anything the document does not contain
 at all, which is where most of D, G, H, I and J land, and **both** of Section
@@ -43,9 +69,10 @@ two findings that exist to keep a degraded review off `READY` as the only ones
 the user is never asked about, and would make Section 7's precondition —
 every `Ask` answered — impossible to satisfy.
 
-When `FORMAT_OK` is `0` there are no sections to walk at all. Every `Ask` is
+When `FORMAT_OK` is `0` there are no sections to walk at all. Every finding is
 then located either by `§whole` or by a quoted line, so there is nothing for
-the walk to visit: put them all on cards in `ASK_ITEMS` order under the same
+the walk to visit: put them all on cards in `ASK_ITEMS` order — the same
+ordering applied to `FIX_ITEMS`, the two interleaved by location — under the same
 four-question limit — the `§whole` ones on the first card as above, then the
 line-located ones in file order. Without this the walk reaches none of them in
 a formatless document, and Section 7's precondition — every `Ask` answered —
@@ -53,14 +80,28 @@ could never be met, on the one document that always carries at least one
 `Ask` (Section 4's `FORMAT_OK` degradation).
 
 Grouping by section keeps related questions together, and most documents only
-have `Ask` items in a couple of sections.
+have findings in a couple of sections.
 
 On a second or later pass, carry every answer from the earlier passes with you.
-An `Ask` the user has already answered — including one answered "keep the
-document as written" — is settled, and is never put to them again, even when
-the re-review re-detects the finding behind it.
+A finding the user has already answered — an `Ask` with a choice, a `Fix now`
+applied or kept, including either answered "keep the document as written" —
+is settled, and is never put to them again, even when the re-review re-detects
+the finding behind it.
 
 ### Building the choices
+
+Every question shows the finding as the report would: its heading line, then
+`Problem:`, `Before:` and `After:` — the reader decides from the same three
+lines Section 5 prints, never from a summary of them.
+
+A `Fix now` question has two choices: **Apply** (recommended) — write the
+`After:` text in place of the `Before:` text — and **Keep the document as
+written**. An `Ask` question has the finding's alternatives from its *proposed
+text*, the recommended one first, then **Keep the document as written**; the
+four-choice limit leaves room for three alternatives, so when the *proposed
+text* holds more, offer the three strongest and say in the question that
+another can be typed as free text. Free text is an answer on either kind of
+question — the harness always offers it.
 
 Every question offers between two and four choices. **Keep the document as
 written** — leave it alone, and say plainly that the finding stays unresolved
@@ -129,12 +170,25 @@ Record each answer against its finding. Do not apply anything yet.
 
 | Value | Content |
 |-------|---------|
-| `ANSWERS` | One entry per `Ask` put to the user: the finding it belongs to, and the answer — a choice, free text, or "keep the document as written" |
+| `ANSWERS` | One entry per finding put to the user — `Ask` and `Fix now` alike: the finding it belongs to, and the answer — a choice, *apply*, free text, or "keep the document as written" |
 
 `ANSWERS` is the only carried value the user produced, and Section 8 reads it
 on every later pass to tell a settled `Ask` from a new one. Carry it the way
 Section 1 says to carry everything: in your context, restated as you go. It
 accumulates across passes and is never reset.
+
+### When a question is refused
+
+A call to the question tool can be refused after Section 1 found the tool
+listed — a permission setting, a harness that lists it but denies it. Treat a
+refusal at the entry card or at any card after it the same way: set
+`INTERACTIVE` to `0`, say in one line that the run fell back because a
+question could not be put, print Section 5's full report without its hint
+line, and stop **without writing** — including the answers already collected
+on earlier cards. Section 7 writes once per pass and only after every
+question is answered; a batch built from half the answers is neither. The
+user re-runs in a session that can answer, or with `--report-only` to say the
+report was all they wanted.
 
 ## Section 7: Applying changes
 

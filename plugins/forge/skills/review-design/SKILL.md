@@ -83,6 +83,6 @@ through the table below.
 | Section 3: Review perspectives | `references/2-review.md` |
 | Section 4: Triage and verdict | `references/3-verdict.md` |
 | Section 5: Report | `references/3-verdict.md` |
-| Section 6: Resolving Ask items | `references/4-fix.md` |
+| Section 6: Putting findings to the user | `references/4-fix.md` |
 | Section 7: Applying changes | `references/4-fix.md` |
 | Section 8: Re-review and exit | `references/4-fix.md` |
