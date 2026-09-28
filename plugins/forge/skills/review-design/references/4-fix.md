@@ -192,8 +192,8 @@ report was all they wanted.
 
 ## Section 7: Applying changes
 
-Once **every** `Ask` in the document has an answer, apply the answers together
-with every `Fix now` in a **single pass** over the file.
+Once **every** question — `Ask` and `Fix now` alike — has an answer, apply the
+answers in a **single pass** over the file.
 
 Writing exactly once per pass is deliberate. The file is only ever changed as
 one batch of targeted edits: a session interrupted anywhere in Sections 3-6
@@ -206,8 +206,9 @@ The batch itself is **not** atomic — it is several targeted edits, and one can
 fail part way through. The write-failure rule below is what covers that case;
 do not read "one batch" as a guarantee that no half-edited state can exist.
 
-If there is nothing to apply — no `Ask` was answered with a change and
-`FIX_ITEMS` is empty — **write nothing** and go straight to Section 8. A clean
+If there is nothing to apply — no `Ask` was answered with a change and no
+`Fix now` was answered *Apply* — **write nothing** and go straight to Section
+8. A clean
 document is the expected happy path, and rewriting it to change nothing is not
 a no-op: it risks paraphrasing prose no finding asked you to touch.
 
@@ -216,6 +217,9 @@ Rules:
 - An `Ask` answered with "keep the document as written" produces **no edit**.
   The finding stays open.
 - A `Reject` produces no edit.
+- A `Fix now` answered **Keep the document as written** produces no edit
+  either. It stays open and counted, exactly as a declined `Ask` does, and is
+  listed under *Kept as written* in the completion output.
 - A `Fix now` is applied as the finding's *proposed text* — the lines the
   report's `After:` showed, in place of its `Before:`. The report is the
   preview of this pass; an edit that differs from it is one the user never saw.
@@ -232,8 +236,8 @@ Rules:
   `Verdict: ❌ NOT READY` line as the last line of that report, with the counts
   from the report you already have. Without it the last `^Verdict:` line in the
   run is the one from *before* any edit — a verdict describing a file that has
-  since been half-rewritten, and exactly the stale read Section 4 warns a
-  `--fix` caller about. A partial write is never `READY`, whatever the counts
+  since been half-rewritten, and exactly the stale read Section 4 warns an
+  interactive run's caller about. A partial write is never `READY`, whatever the counts
   said beforehand.
 
 After writing, continue to Section 8.
@@ -257,11 +261,11 @@ then runs for real against a spec Section 3 never saw. Its findings — coverage
 gaps that are routinely `Blocker`s — are not in the report you just emitted, and
 taking the shortcut would drop them and the verdict they change. When
 `SPEC_FILE` was set this pass and Section 7 wrote nothing, re-run Sections 3 and
-4 anyway and re-emit Section 5's report; only the document is unchanged, so
+4 anyway and re-emit Section 5's compact header; only the document is unchanged, so
 re-use Perspective C's results exactly as the *Otherwise* branch below does.
 
 Otherwise, re-run Sections 3 and 4 against the written file and re-emit
-Section 5's report, then compare what it found against what this run has
+Section 5's compact header, then compare what it found against what this run has
 already settled. Re-run Section 2's *Format check* as well, and its *Spec
 cross-reference* when the batch touched a plan's `Spec:` line. `FORMAT_OK` and
 `SPEC_FILE` are Section 2 values and Section 4's degradation table reads both,
@@ -279,19 +283,19 @@ by the directories the document touches, so a batch that added a path under a
 directory with its own CLAUDE.md means reading that file now, off the listing
 you already have.
 You are using those sections as a subroutine: **their own routing does not
-apply here.** Section 5's closing line sends a `--fix` run to Section 6 —
-ignore it and come back to this section instead. (Section 5's `--fix` hint
-needs no such exemption: its own condition already requires `FIX_MODE` to be
-`0`, and it never is on this path.)
+apply here.** Section 5's closing line sends an interactive run to Section 6 —
+ignore it and come back to this section instead. (Section 5's hint needs no
+such exemption: its own condition already requires `INTERACTIVE` to be `0`,
+and it never is on this path.)
 
-Go back to Section 6 only for a **new `Ask`, at any severity** — meaning one
-this run has neither resolved nor had declined. Disposition routes here;
-severity does not. A new `Blocker` is a question only when its disposition is
-`Ask`, and a new `Minor` `Ask` is a question just the same — routing on severity
-instead would send a new `Blocker` whose answer is uniquely determined to
-Section 6 with nothing to ask about. A finding whose `Ask` the user has already
-answered is neither: it is settled, it stays settled, and settled means it is
-not put to them again. Restate its recorded outcome and move on.
+Go back to Section 6 for every **new finding, at any severity and either
+disposition** — meaning one this run has neither resolved, applied, nor had
+declined. A new `Blocker` and a new `Minor` are questions just the same: the
+cards are how every counted finding reaches the user, and severity only
+orders them on the card. A finding the user has already answered — an `Ask`
+with a choice, a `Fix now` applied or kept — is neither: it is settled, it
+stays settled, and settled means it is not put to them again. Restate its
+recorded outcome and move on.
 
 **A finding this run dispositioned `Reject` is settled on the same terms.** It
 produces no edit, so the re-review detects it again on every later pass, exactly
@@ -328,12 +332,12 @@ open `Ask` as it is as `NOT READY` forever.
 `finalize.md` carries the same rule for the same reason — without it the loop
 ping-pongs on one contested finding until the cap fires.
 
-A **new `Fix now`, at any severity**, needs no question, so it does not go back
-to Section 6 — it goes back to **Section 7** and is applied in the next batch.
-Both return paths cost a pass and are counted below. When one re-review turns
-up both a new `Ask` and a new `Fix now`, that is still a single pass, not two:
-Section 6's *Ask before Fix now* order holds, so go to Section 6 and then fall
-through to Section 7 with the new `Fix now` items in the same batch.
+A **new `Fix now`** goes back to Section 6 like a new `Ask`: it is put on a
+card, and applied in the next batch only if the user takes it. When one
+re-review turns up both a new `Ask` and a new `Fix now`, that is still a
+single pass, not two: Section 6's *Ask before Fix now* order holds on the
+card, and Section 7 applies both answers in the same batch. The return path
+costs a pass and is counted below.
 
 When the re-review turns up **neither** — no new `Ask` and no new `Fix now` —
 the loop has converged: do not go back, and continue to *Completion output*
@@ -341,20 +345,19 @@ below with the verdict this re-review produced. Falling through is the exit.
 Nothing else has to fire for the loop to end, and the cap is the other exit,
 not the only one.
 
-"New" means on this axis what it means on the `Ask` axis: one this run has not
-already applied. A `Fix now` this run *did* apply and the re-review still
+"New" means on this axis what it means on the `Ask` axis: one this run has
+neither applied nor had declined. A `Fix now` this run *did* apply and the re-review still
 detects is **not** new — the edit did not land what it was for. Do not send it
 round again to be re-applied blind; report it in the completion output exactly
 as a re-detected answered `Ask` is reported, as an applied change that did not
 take. Either way it keeps its severity and its place in the counts, so a
 `Blocker` whose fix did not land still holds the document at `NOT READY`.
 
-Section 4 promises that
-every `Fix now` is applied automatically under `--fix`; routing only
+Section 4 promises that every counted finding reaches the user; routing only
 `Blocker`/`Major`/`Ask` back would break that promise for a `Minor` `Fix now`
 the re-review turned up, and drop it without a word. If the cap fires with
-`Fix now` items still unapplied, **list them in the completion output** rather
-than dropping them.
+findings that were never put on a card, **list them in the completion
+output** rather than dropping them.
 
 Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
@@ -428,21 +431,28 @@ off to implementation* block, which a `READY` plan reaches on this path too.
 
 ### Completion output
 
-Emit three things:
+Emit four things:
 
 1. The verdict from the final re-review
 2. A bulleted summary of what changed
-3. A pointer to `git diff` for the details
+3. A bulleted list of what the user kept as written — every finding answered
+   *Keep the document as written*, `Ask` or `Fix now`, with its disposition —
+   omitted when empty
+4. A pointer to `git diff` for the details
 
 ```
 ── Re-review after fixes ──
-Verdict: ✅ READY   Blocker 0 / Major 0 / Minor 1 / Ask 0
+Verdict: ❌ NOT READY   Blocker 0 / Major 0 / Minor 1 / Ask 1
 
 Applied:
   • §3.2  state storage: TBD → SQLite (your answer)
   • §3    retry count: unified on 3 (§2 was authoritative)
   • §7    added a test strategy section
   • §6.3  unified "job" / "task" terminology
+
+Kept as written:
+  • §5    error handling left undefined (Ask, kept)
+  • §whole  no hit/miss counter (Fix now, kept)
 
 Review the changes with: git diff -- '<target file>'
 ```
@@ -458,14 +468,17 @@ is why four bullets do not account for every count that report carried.
 
 When Section 7 wrote nothing, the header is wrong too: no fixes were applied,
 so title that block `── No changes applied ──` rather than
-`── Re-review after fixes ──`. Items 2 and 3 also have no subject: emit
+`── Re-review after fixes ──`. Items 2 and 4 also have no subject: emit
 the verdict, say in one line **why** nothing was written, and print no
-`Applied:` list and no `git diff` pointer. An empty bullet list under
+`Applied:` list and no `git diff` pointer. The *Kept as written* list (item
+3) is printed whenever it has entries — on this path it usually holds every
+finding the user declined, and that list is the record of why nothing was
+written. An empty bullet list under
 `Applied:` and a diff pointer at an unchanged file both read as "something
 happened here" when nothing did.
 The three reasons are not interchangeable: *no change was needed* when there was
 nothing to apply; *every proposed change was declined* when the file is
-unchanged because each `Ask` was answered "keep the document as written"; and
+unchanged because every card was answered "keep the document as written"; and
 *the companion spec was supplied and the plan re-reviewed against it* on the one
 path where Section 7 writes nothing and the *Loop* above re-reviews anyway —
 Section 6's *The spec is at this path* set `SPEC_FILE`. Reporting the second as
@@ -497,7 +510,7 @@ if git ls-files --error-unmatch -- "$FORGE_TARGET" >/dev/null 2>&1; then
   # reader pastes: keep it, and the path, byte for byte.
   #
   # Single-quote the path: this line is a command the reader copies and runs,
-  # and the same rule Section 5 puts on the `--fix` hint applies here — an
+  # and the same rule Section 5 puts on the hint applies here — an
   # unquoted `docs/my design/foo.md` pastes as two pathspecs and diffs neither.
   # Escape each `'` in the path as `'\''` first, so one rule covers every path.
   # There is no un-quotable path, and printing one bare is not a safe fallback:
