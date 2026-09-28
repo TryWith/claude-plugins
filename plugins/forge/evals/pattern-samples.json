@@ -2,7 +2,8 @@
   "verdict-line-not-ready.md": {
     "match": [
       "Verdict: ❌ NOT READY   Blocker 2 / Major 4 / Minor 3 / Ask 2",
-      "── Review: docs/superpowers/specs/2026-01-10-cache-design.md (spec) ──\nVerdict: ❌ NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 1"
+      "── Review: docs/superpowers/specs/2026-01-10-cache-design.md (spec) ──\nVerdict: ❌ NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 1",
+      "Verdict: ❌ NOT READY   致命 1 / 重大 0 / 軽微 6 / 要確認 1"
     ],
     "no_match": [
       "Verdict: ✅ READY   Blocker 0 / Major 0 / Minor 0 / Ask 0",
@@ -15,7 +16,8 @@
   "no-verdict-line.md": {
     "match": [
       "Verdict: ❌ NOT READY   Blocker 1 / Major 0 / Minor 0 / Ask 0",
-      "レビュー結果\nVerdict: ✅ READY   Blocker 0 / Major 0 / Minor 0 / Ask 0"
+      "レビュー結果\nVerdict: ✅ READY   Blocker 0 / Major 0 / Minor 0 / Ask 0",
+      "Verdict: ❌ NOT READY   致命 1 / 重大 0 / 軽微 6 / 要確認 1"
     ],
     "no_match": [
       "`--fx` は使えないオプションです。使えるのは `--fix` だけです。",

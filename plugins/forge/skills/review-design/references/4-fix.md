@@ -98,6 +98,11 @@ this is the one answer that clears this finding by supplying what was missing
 rather than by editing the document. If the path does not resolve either, say so
 and leave the finding unresolved.
 
+The choices on a card are the ones the finding's *proposed text* listed — what
+the report's `After:` line showed — each with its one-line trade-off, plus
+*Keep the document as written*. A card that offers a choice the report did not
+is a report that failed to preview the question.
+
 ```
 Q1 [§3.2] The state storage mechanism is TBD
 
@@ -157,6 +162,9 @@ Rules:
 - An `Ask` answered with "keep the document as written" produces **no edit**.
   The finding stays open.
 - A `Reject` produces no edit.
+- A `Fix now` is applied as the finding's *proposed text* — the lines the
+  report's `After:` showed, in place of its `Before:`. The report is the
+  preview of this pass; an edit that differs from it is one the user never saw.
 - Preserve the document's existing heading structure and style. Do not reformat
   sections you are not changing. The one exception is an `Ask` answered
   **Restructure the document into the superpowers shape** — Section 6's choice

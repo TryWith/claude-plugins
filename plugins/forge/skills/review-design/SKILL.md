@@ -55,7 +55,9 @@ cross-reference such as "Section 4" or "Section 8's `pass n/3`" is found
 through the table below.
 
 1. **Resolve the target.** Read `references/1-resolve.md`.
-2. **Review the document.** Read `references/2-review.md`.
+2. **Review the document, then challenge every finding.** Read
+   `references/2-review.md`. Its last subsection is not optional: no finding
+   reaches step 3 unchallenged.
 3. **Judge and report.** Read `references/3-verdict.md`. Its *Where to stop*
    decides whether the run ends with the report.
 4. **Resolve, apply, re-review** — only when `--fix` was passed. Read

@@ -29,7 +29,12 @@ large the defect looks on the page.
 
 `Blocker`, `Major` and `Minor` are the words the header block and the verdict
 line are summed on, and Section 5 requires those two totals to reconcile. They
-are keys: emit them in English however the finding text beside them is written.
+are not keys: nothing reads them mechanically — a caller greps the `Verdict:`
+prefix and `READY` / `NOT READY` below, never the counts beside them — so emit
+them in the conversation's language. Choose one word for each and use that
+same word everywhere the label appears: the verdict line, the header block and
+every finding's heading. The reconciliation is done by eye, and two words for
+one label make it fail.
 
 Examples:
 
@@ -65,13 +70,15 @@ finding always wins over the table.
 
 | Label | Condition | Effect |
 |-------|-----------|--------|
-| `Fix now` | The answer is uniquely determined | Applied automatically under `--fix` |
-| `Ask` | A design decision is required. Perspective C mismatches go here by default | Put to the user as a multiple-choice question |
-| `Reject` | False positive | Reported with a one-line reason |
+| `Fix now` | The answer is uniquely determined — the finding's *proposed text* is one replacement | Applied automatically under `--fix` |
+| `Ask` | A design decision is required — the *proposed text* is a set of choices. Perspective C mismatches go here by default | Put to the user as a multiple-choice question |
+| `Reject` | False positive — a finding Section 3's *Challenge every finding* refuted | Reported with a one-line reason |
 
-`Fix now`, `Ask` and `Reject` are read back the same way — Section 8 routes on
-the disposition word, and the verdict formula counts unresolved `Ask` items —
-so they stay English too.
+`Fix now`, `Ask` and `Reject` are emitted in the conversation's language the
+same way, one fixed word each. Section 8 routes on the disposition and the
+verdict formula counts unresolved `Ask` items, but both read the carried values
+below — `ASK_ITEMS`, `FIX_ITEMS` — and not the printed word, so the
+translation costs them nothing.
 
 **High severity does not imply `Ask`.** A `Major` finding whose answer is
 uniquely determined is a `Fix now`.
@@ -180,6 +187,7 @@ work:
 | `PERSPECTIVE_STATUS` | One entry per perspective A–J: its severity counts, or `not applicable`, or `not checked (format)`. Section 5's header block is emitted from this and from nothing else — the findings list can tell you a perspective's counts, but nothing in it distinguishes a perspective that was skipped from one that came back clean |
 | `ASK_ITEMS` | Every finding whose disposition is `Ask`, ordered by the document section it belongs to, with the `§whole` ones first. When `FORMAT_OK` is `0` a finding about specific text is located by a quoted line rather than a `§n.n`, so there is no section to order it by: order those by the line's position in the file, after the `§whole` ones |
 | `FIX_ITEMS` | Every finding whose disposition is `Fix now` |
+| `CHALLENGE_COUNTS` | From Section 3's *Challenge every finding*: the number of findings challenged and the number rejected. Section 5 prints them under the header block |
 
 `ASK_ITEMS` is ordered by document section, not by severity: Section 6 walks
 the document in order and puts one card to the user per section. `§whole`
@@ -189,11 +197,13 @@ puts them on a card of their own before the walk starts.
 ## Section 5: Report
 
 Emit the report in the conversation's language. The keys in it stay English:
-the `Verdict:` prefix and `READY` / `NOT READY` (Section 4), the severity and
-disposition labels (Section 4), the `spec` / `plan` document type (Section 2),
-and each perspective's letter-and-name identifier (Section 3). Each is called
-out as a key where it is defined, alongside what reads it — there is no
-separate list to consult.
+the `Verdict:` prefix and `READY` / `NOT READY` (Section 4), the `spec` /
+`plan` document type (Section 2), and each perspective's letter-and-name
+identifier (Section 3). Each is called out as a key where it is defined,
+alongside what reads it — there is no separate list to consult. The severity
+and disposition labels are **not** keys: Section 4 has them emitted in the
+conversation's language, one fixed word each, and the example below shows them
+in English only because this file is written in English.
 
 ### Structure
 
@@ -212,22 +222,30 @@ H Alternatives   ⚠️ Minor 1
 I YAGNI          ✓ clean
 J Acceptance     ⚠️ Major 1
 
+Challenged: 10 findings / rejected 1
+
 [Findings]
 
-[Blocker] §3.2 A Completeness
-  The state storage mechanism is still TBD
-  → an implementer cannot tell what to build
-  Disposition: Ask (a design decision is required)
+[Blocker] §3.2 A Completeness — Ask
+  Problem: The state storage mechanism is still TBD, so an implementer cannot tell what to build.
+  Before:  The storage mechanism for cached entries is TBD.
+  After:   Choose one — (a) the existing SQLite store: no new dependency; (b) Redis: one more service to run; (c) a plain file: simplest, weak under concurrent writes
 
-[Major] §whole D Blind Spots
-  No test strategy section
-  → verification method sends the work back to design after implementation
-  Disposition: Fix now (write the standard section)
+[Major] §whole D Blind Spots — Fix now
+  Problem: There is no test strategy section, so how the work is verified gets decided after implementation and sends it back to design.
+  Before:  none
+  After:   ## 7. Test strategy
+           - Unit: cache hit, miss and expiry against an in-memory store
+           - Integration: one round trip through the HTTP client with the cache on
+           - Acceptance: the criteria in §8, run as a script
 
-[Minor] §6.3 B Consistency
-  "job" and "task" are used interchangeably
-  → no effect on implementation
-  Disposition: Fix now (unify terminology)
+[Minor] §6.3 B Consistency — Fix now
+  Problem: "job" and "task" name the same thing.
+  Before:  Each job is retried; a task that fails three times is dropped.
+  After:   Each task is retried; a task that fails three times is dropped.
+
+[Reject] §4 C Repo Grounding
+  Problem: Flagged `src/db/sqlite.ts` as missing; it exists (`ls src/db/`).
 
 → To apply fixes: /forge:review-design "docs/superpowers/specs/2026-08-29-foo-design.md" --fix
 ```
@@ -242,8 +260,11 @@ Rules for the header block:
   is precisely the "checked, nothing found" / "not checked" confusion this
   block exists to prevent
 - The header block counts severities only. Disposition never appears here —
-  the verdict line carries the `Ask` total, and each finding states its own
-  disposition below
+  the verdict line carries the `Ask` total, and each finding carries its own
+  disposition on its heading line below
+- One line under the header block gives Section 3's `CHALLENGE_COUNTS`: how
+  many findings were challenged, how many rejected. On a report with no
+  `[Reject]` in it, this line is the only evidence the challenge ran
 - **The three severity counts on the verdict line must equal the sum of the
   per-perspective counts.** Add them up before emitting; a header that
   disagrees with its own breakdown is exactly the defect perspective B exists
@@ -279,15 +300,40 @@ Rules for the header block:
   fix pass to do — on a `READY` report with no findings, `--fix` would re-read
   the document, ask nothing, write nothing and re-emit this same report
 
-Each finding is four lines: `[Severity] location Perspective`, then the
-finding, then `→` and the consequence, then the disposition with a short
-reason. Do not compress them onto one line — the consequence is what justifies
-the severity, and a reader needs to be able to disagree with it.
+Each finding is a heading line and three labelled lines under it. The heading
+is `[Severity] location Perspective — Disposition`: the disposition sits on the
+heading so that the body is only the three things a reader needs in order to
+act. The body is:
+
+- `Problem:` — Section 3's *finding* and *consequence*, at most two sentences,
+  written for a reader who has not opened the code or the repository: what is
+  wrong, then what goes wrong if the document ships as written. Drop the
+  second sentence when the first makes it obvious. No call chains, no
+  `file:line` trails, no method-by-method narration — the two lines below
+  carry the specifics. At most one file or symbol, and only one the reader has
+  to go to. A finding that rests on an inference rather than on something run
+  or opened ends with the one-word tag Section 3 asked for.
+- `Before:` — Section 3's *current text*: the document's own words, verbatim,
+  indented under the label and never paraphrased. *none* for a `§whole`
+  finding.
+- `After:` — Section 3's *proposed text*. For a `Fix now`, the lines that
+  replace `Before:`, in full, so a reader sees the whole change without opening
+  the file and Section 7 applies exactly what was shown. For an `Ask`, the
+  choices, one line each with the recommended one first — the same choices
+  Section 6 puts on its card.
+
+Do not fold the three back into a paragraph, and do not drop `Before:` /
+`After:` from a finding that has them. The consequence is what justifies the
+severity, and a reader needs to be able to disagree with it; the before/after
+pair is what lets the fix be checked before it is applied.
 
 A `Reject` is the one exception. It counts toward no severity total, so heading
 it `[Blocker]` would put the findings list at odds with the header block the
-rule above just reconciled. Head it `[Reject] location Perspective` instead,
-and give the one-line reason in place of the consequence and disposition.
+rule above just reconciled. Head it `[Reject] location Perspective`, with no
+disposition; its `Problem:` is the one-line reason from Section 3's *Challenge
+every finding*; it has no `Before:` and no `After:`. Rejects come **after**
+every counted finding, so a reader who stops at the last counted one has seen
+everything that bears on the verdict.
 
 If the document was not in the expected format, or a plan's companion spec
 could not be found, say so **above** the verdict line.
