@@ -355,3 +355,19 @@ graders match `^Verdict:` and `NOT READY`, and every llm rubric accepts any
 wording — so the scores above are expected to hold, but `02`'s `not-fooled`
 and `03`/`08`'s `no-false-missing` are the rows to read first on the next run,
 being the two the challenge step most directly bears on.
+
+**Interactive default, on 2.0.0, not re-evaluated.** The skill's default
+mode is now interactive: Section 5 prints a compact header (verdict line,
+header block, challenge line, `Reject` entries) and Section 6 puts every
+surviving finding — `Ask` and `Fix now` alike — to the user as multiple-choice
+cards, behind an entry card that can show the full report instead. The
+report-only behaviour this suite records is reached by `--report-only`, or
+automatically when the AskUserQuestion tool is not available — which is the
+case for every run here, since `allowed_tools` lists `[Read, Glob, Grep,
+Skill, Bash]`. So the eight cases are expected to run as before and score as
+above; the rows to read first on the next run are `01` (does the fallback
+print the full report, findings list included, with the `^Verdict:` line) and
+`05` (does `--fx` still draw the `--fix` suggestion now that `--report-only`
+is the second accepted flag). The interactive path cannot be graded — no
+grader can answer a card — and is checked by hand in a `claude --plugin-dir`
+session on the `01` fixture.
