@@ -8,6 +8,7 @@
   - Perspective H: why this is checkable at all
   - Direction
   - Recording a finding
+  - Challenge every finding
 
 ## Section 3: Review perspectives
 
@@ -187,14 +188,106 @@ required.
 
 ### Recording a finding
 
-Every finding carries four fields. Do not collapse them:
+Every finding carries six fields. Do not collapse them:
 
 | Field | Content |
 |-------|---------|
 | location | `§3.2` for a finding about specific text. `§whole` for a finding about something the document does not contain at all — including when `FORMAT_OK` is `0`, since an absent thing has no line to quote. When `FORMAT_OK` is `0` and the finding *is* about specific text, quote the offending line instead of citing a section, because the section numbers it would cite do not exist. `§whole` is a key, not prose — Section 4 sorts `ASK_ITEMS` on it and Section 6 reads it to build the first card, both out of this command's own output — so it stays literal and English however the finding beside it is written |
 | perspective | The letter and English name, e.g. `A Completeness` |
-| finding | What is wrong — translated to the conversation's language |
-| consequence | What happens if it is implemented as written — translated to the conversation's language |
+| finding | What is wrong, in one sentence a reader who has not opened the code or the repository can follow — translated to the conversation's language. Plain words: no call chains, no `file:line` trails, no method-by-method narration; the *current text* and *proposed text* below carry the specifics. Name at most one file or symbol, and only one the reader has to go to. When the finding rests on an inference rather than on something you ran or opened — a runtime behaviour read off the code — end the sentence with a one-word tag saying so |
+| consequence | What happens if it is implemented as written, in one sentence — translated to the conversation's language. Leave it empty when the finding makes it obvious |
+| current text | The document's own words at the location, quoted verbatim: the lines the finding is about and no more. For a change that recurs across the document, every occurrence, each with its location. A `§whole` finding has nothing to quote — record that it is absent, and Section 5 prints *none* |
+| proposed text | What goes in place of *current text*. When the answer is uniquely determined, the replacement itself — the exact lines; for a section the document lacks, its headings with one line under each; for a change that recurs, the replacement stated once as a rule that Section 7 applies at every occurrence *current text* listed — so that Section 5 can show the whole change and Section 7 has nothing left to invent. When a design decision is needed, the choices the user will pick between, one line each, the one you would recommend first. Section 4 reads the disposition off this field's shape: one replacement is a `Fix now`, a set of choices is an `Ask` |
 
 The consequence field is not decoration: Section 4 assigns severity from it.
+Neither is the current-text field: *Challenge every finding* below looks it up
+in the document, and a finding whose quote is not there does not survive.
+
+### Challenge every finding
+
+Run this after the last perspective and before Section 4 assigns a severity,
+on every pass — Section 8's re-review re-enters Section 3 and comes through
+here again. It is not a re-read and it is not optional: for each finding, try
+to refute it, and let the outcome decide whether it survives. The perspectives
+above look for defects in the document; this step looks for defects in the
+review. Skipping it is how a document that settles a question in §7 gets a
+`Blocker` for leaving it open.
+
+Three challenges, each with a check you actually run:
+
+1. **Is the text there — or is the gap real?** For a finding about specific
+   text, look its *current text* up in the document and require a hit: a
+   quote the file does not contain is a finding about a document that does
+   not exist. For a `§whole` finding — "there is no X" — search the whole
+   document for X under other names, in other sections, in a table or a
+   bullet. The most common false positive is a thing the document does say,
+   somewhere the reviewer did not look. Found → `Reject`, naming where.
+
+```bash
+# The quote is the document's text, so it is data: fed on stdin through a
+# quoted heredoc, never inlined — Perspective C's rule, for its reason. So
+# is TARGET_FILE, bound the way Section 2's `Spec:` block binds it — it
+# never goes into a command as text — and it is repository-root-relative,
+# so the block moves there first like every other. `-F` takes each line
+# literally, so a paraphrased quote fails instead of matching by accident,
+# and each line is checked on its own because the document may wrap a
+# sentence differently from the quote: a multi-line quote passes when every
+# line does. `ok` and `MISSING` are markers you read back out of this
+# block's own output — keep them English.
+# A quote line equal to `QUOTE` cannot be bound this way — `read` stops
+# there, as it does at `PATHS` in Perspective C — so check that one line
+# with the Read tool instead.
+FORGE_ROOT=$(git rev-parse --show-toplevel) && cd "$FORGE_ROOT" || exit 1
+
+IFS= read -r FORGE_TARGET <<'FORGE_TARGET_PATH'
+<the target file>
+FORGE_TARGET_PATH
+
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  if grep -qF -- "$line" "$FORGE_TARGET"; then printf 'ok      %s\n' "$line"
+  else printf 'MISSING %s\n' "$line"; fi
+done <<'QUOTE'
+<the current-text lines, one per line>
+QUOTE
+```
+
+A `MISSING` line means the quote is wrong, not yet that the finding is:
+re-read the location, and either correct the quote to what the document
+says or, if the text the finding describes is not there in any form,
+`Reject` it.
+
+2. **Is the repository fact true?** A finding that rests on the repository — a
+   path that "does not exist", a convention a `CLAUDE.md` "requires", a pattern
+   "every other test follows" — stands on a command run in this session or a
+   file opened in it. If the claim came from memory, or from the document's
+   own description of the repository, run the check now. A check that
+   contradicts the claim → `Reject`. A check that narrows it — the convention
+   exists but governs another directory — rewrites the finding to what the
+   check showed.
+
+3. **Does the consequence follow, and does the fix hold?** Read the *proposed
+   text* against the rest of the document as if it had been applied: is the
+   problem gone, and does nothing else now disagree with it — a number that
+   contradicts §5, a task that duplicates another? A replacement that would
+   open a new inconsistency is not uniquely determined: turn it into choices,
+   and Section 4 will make the finding an `Ask`. Then read the *consequence*
+   as a sceptic: does it happen if the document ships as written, or only if
+   several other things also go wrong? Cut it to what does follow and let
+   Section 4 re-rate the severity from that; when nothing follows, `Reject`.
+
+A finding that fails a challenge becomes a `Reject`. It keeps its location and
+perspective, its finding field becomes the one-line reason, naming the
+challenge — "§7 covers this", "the file exists: `ls src/db/`" — and its
+current and proposed text are dropped. Section 5 prints it that way.
+
+Do not soften instead of rejecting. A finding that survives is reported at the
+severity its consequence earns; one that does not is a `Reject`. A "`Minor`,
+just in case" for a finding the challenge disproved is a way of reporting a
+finding you know to be wrong.
+
+Record two numbers — how many findings were challenged, and how many were
+rejected — and carry them as `CHALLENGE_COUNTS` (Section 4's table). Section 5
+prints them under the header block, which is how a reader can tell this step
+ran on a report that carries no `Reject`.
 

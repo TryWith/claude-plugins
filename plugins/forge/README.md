@@ -34,7 +34,7 @@ The following commands must be available before use:
 > nothing else in the workflow changes.
 
 > **About `/forge:review-design`:** it needs none of the commands above — it
-> only reads a markdown file (and, with `--fix`, edits that same file), so it
+> only reads a markdown file (and, when you accept a fix, edits that same file), so it
 > runs on a bare Claude Code install. The
 > `superpowers` plugin is optional and only shapes the two ends of the flow: it
 > produces the spec and plan the review reads, and supplies the
@@ -77,23 +77,30 @@ spots, buildability, scope, assumptions, alternatives, YAGNI, and acceptance
 criteria — and reports `READY` only when no `Blocker`, no `Major` and no
 unresolved `Ask` remain.
 
-By default it is report-only and changes nothing, which makes it safe to run
-from a hook or CI — pass an explicit, self-typing path (under `specs/` or
-`plans/`, or ending in `-design.md`, but not carrying both components) for a
-fully unattended run, since without one it may still ask which document to
-review or what type it is. Pass `--fix`
-to have it put the design decisions to you as
-multiple-choice questions and then apply the answers — findings with a
-uniquely determined answer (`Fix now`) are applied without being asked. Under
-`--fix` the document is re-reviewed after each round of changes, up to 3 rounds.
+By default it is interactive: after the verdict it puts every finding to you
+as a multiple-choice card — apply this fix or keep the document as written,
+and for a design decision, which alternative — then applies your answers in
+one batch and re-reviews, up to 3 rounds. The first card also offers the full
+report instead. Pass `--report-only` to stop at the report and change
+nothing, which is the mode for a hook or CI; a run with no way to ask a
+question (`claude -p`, a hook, an eval sandbox) falls back to it on its own.
+For a fully unattended run pass `--report-only` and an explicit, self-typing
+path (under `specs/` or `plans/`, or ending in `-design.md`, but not carrying
+both components), since without one it may still ask which document to
+review or what type it is. `--fix` is still accepted and changes nothing —
+the interactive run is what it used to switch on. **Upgrading from 1.x:** a
+hook or CI job that ran `/forge:review-design <path>` with no flag should now
+pass `--report-only`; it keeps working without one only because a headless
+session has no question tool to fall back from.
 
 ```bash
-# Report on the newest design document. In the standard superpowers layout a
-# feature's spec and plan share a date, so this normally asks which one you mean.
+# Review the newest design document and work through the findings as cards.
+# In the standard superpowers layout a feature's spec and plan share a date,
+# so this normally asks which one you mean first.
 /forge:review-design
 
-# Review a specific file and apply fixes
-/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+# Report only — for a hook or CI gate
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --report-only
 ```
 
 Typical flow with superpowers:
@@ -173,7 +180,7 @@ this list applies to it.
 > Step 2 をスキップする。いずれの場合もそれ以外の挙動は変わらない。
 
 > **`/forge:review-design` について:** 上記の依存コマンドはいずれも不要で、
-> Markdown ファイルを読む（`--fix` 時はその同じファイルを書き換える）だけなので
+> Markdown ファイルを読む（修正を適用したときはその同じファイルを書き換える）だけなので
 > 素の Claude Code でも動作する。
 > `superpowers` プラグインは任意で、フローの両端にのみ関わる。レビュー対象の
 > 設計書・実装計画を生成するのは `superpowers` 側であり、`READY` と判定された
@@ -215,21 +222,28 @@ this list applies to it.
 確認し、`Blocker` と `Major` と未解決の `Ask` がすべて 0 のときだけ `READY` と
 判定します。
 
-既定ではレポートのみでファイルを変更しないため、フックや CI から安全に実行
-できます。完全に無人で実行するには、種別が一意に定まるパス（`specs/` または
-`plans/` 配下、もしくは `-design.md` で終わるファイル名。ただし両方を含むパスは
-除く）を明示的に渡してください。
-渡さない場合、対象文書やその種別を質問することがあります。`--fix` を付けると設計判断を選択式で質問し、回答を反映します。回答が
-一意に定まる指摘（`Fix now`）は質問せずそのまま適用されます。`--fix` 時は変更の
-たびに再レビューし、最大 3 周まで繰り返します。
+既定では対話形式です。判定を出したあと、指摘を 1 件ずつ選択式のカードで示し
+（修正を適用するか文書のままにするか、設計判断ならどの案にするか）、回答を
+まとめて反映して再レビューします（最大 3 周）。最初のカードでは全文レポートを
+選ぶこともできます。`--report-only` を付けるとレポートで止まりファイルを変更
+しないので、フックや CI からはこちらを使ってください。質問できない環境
+（`claude -p`、フック、eval のサンドボックス）では自動的にこのモードに落ちます。
+完全に無人で実行するには `--report-only` に加えて、種別が一意に定まるパス
+（`specs/` または `plans/` 配下、もしくは `-design.md` で終わるファイル名。
+ただし両方を含むパスは除く）を明示的に渡してください。渡さない場合、対象文書
+やその種別を質問することがあります。`--fix` は互換のため受け付けますが、
+動作は既定と同じです。**1.x から上げる場合:** フックや CI でフラグなしに
+`/forge:review-design <path>` を回していたなら `--report-only` を足してください。
+フラグなしでも動くのは、ヘッドレスのセッションに質問ツールが無いからにすぎません。
 
 ```bash
-# 最新の設計書をレポート。superpowers の標準構成では同じ機能の spec と plan が
-# 同じ日付になるため、通常はどちらを見るか質問されます。
+# 最新の設計書をレビューし、指摘をカードで 1 件ずつ確認する。superpowers の
+# 標準構成では同じ機能の spec と plan が同じ日付になるため、通常は先にどちらを
+# 見るか質問されます。
 /forge:review-design
 
-# ファイルを指定して修正まで実行
-/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+# レポートのみ（フックや CI のゲート向け）
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --report-only
 ```
 
 superpowers と組み合わせた典型的な流れ:
@@ -305,7 +319,7 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 > 上述任一情况下其余步骤均不变。
 
 > **关于 `/forge:review-design`:** 它不需要上述任何依赖命令——只读取一个
-> Markdown 文件（使用 `--fix` 时改写同一个文件），因此在原生 Claude Code 上
+> Markdown 文件（当你接受某项修复时改写同一个文件），因此在原生 Claude Code 上
 > 即可运行。`superpowers` 插件是可选的，
 > 只涉及流程的两端：它生成供本命令评审的设计文档与实现计划，并提供判定为
 > `READY` 的实现计划所交接到的 `superpowers:subagent-driven-development` /
@@ -345,21 +359,25 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 遗漏视角、可实现性、范围、前提依据、备选方案记录、YAGNI、验收条件——仅当
 `Blocker`、`Major` 和未解决的 `Ask` 全部为 0 时才判定为 `READY`。
 
-默认仅输出报告、不修改文件，因此可以安全地从 hook 或 CI 调用。若要完全无人值守地运行，
-请显式传入类型可自行判定的路径（位于 `specs/` 或 `plans/` 下，或文件名以
-`-design.md` 结尾，但不可同时包含两者）；否则它仍可能询问要审查哪份文档、
-或它属于哪种类型。加上 `--fix`
-后，它会以选择题形式询问设计决策并应用你的回答；其中答案唯一确定的发现
-（`Fix now`）会直接应用，无需询问。使用 `--fix` 时，每轮修改后都会重新审查，
-最多 3 轮。
+默认是交互式的：给出判定后，它会把每条发现逐一以选择题卡片的形式呈现给你
+（应用此修复还是保持原文；若是设计决策，则选哪个方案），然后一次性应用你的
+回答并重新审查，最多 3 轮。第一张卡片也可以选择改为显示完整报告。加上
+`--report-only` 则在报告处停止、不修改文件，hook 或 CI 请使用这一模式；在无法
+提问的环境（`claude -p`、hook、eval 沙箱）中会自动回落到该模式。若要完全无人
+值守地运行，请在 `--report-only` 之外显式传入类型可自行判定的路径（位于
+`specs/` 或 `plans/` 下，或文件名以 `-design.md` 结尾，但不可同时包含两者）；
+否则它仍可能询问要审查哪份文档、或它属于哪种类型。`--fix` 出于兼容仍被接受，
+但行为与默认相同。**从 1.x 升级时：** 若 hook 或 CI 以前不带参数运行
+`/forge:review-design <path>`，现在请加上 `--report-only`；不加也能运行，只是
+因为无头会话没有可供回落的提问工具。
 
 ```bash
-# 报告最新的设计文档。在 superpowers 的标准布局中，同一功能的 spec 与 plan
-# 日期相同，因此通常会询问你指的是哪一个。
+# 审查最新的设计文档，并逐条以卡片处理发现。在 superpowers 的标准布局中，
+# 同一功能的 spec 与 plan 日期相同，因此通常会先询问你指的是哪一个。
 /forge:review-design
 
-# 指定文件并应用修复
-/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --fix
+# 仅输出报告——用于 hook 或 CI 门禁
+/forge:review-design docs/superpowers/specs/2026-08-29-foo-design.md --report-only
 ```
 
 与 superpowers 配合的典型流程：

@@ -1,11 +1,13 @@
-# Resolve, apply, re-review
+# Put the findings to the user, apply, re-review
 
 ## Contents
 
-- Section 6: Resolving Ask items
+- Section 6: Putting findings to the user
+  - Entry card
   - Order: Ask before Fix now
   - One card per section
   - Building the choices
+  - When a question is refused
   - What to carry forward
 - Section 7: Applying changes
 - Section 8: Re-review and exit
@@ -14,58 +16,104 @@
   - Completion output
   - Handing off to implementation
 
-## Section 6: Resolving Ask items
+## Section 6: Putting findings to the user
 
-Reached only when `FIX_MODE` is `1`.
+Reached only when `INTERACTIVE` is `1`, from Section 5's compact header. Every
+counted finding — those that survived Section 3's challenge and Section 4's
+degradation findings, `Ask` and `Fix now` alike — is put to the user here as a
+question on a card; a `Reject` never is, since there is nothing to choose
+about it and the compact header already showed it.
+
+### Entry card
+
+On the first arrival at this section in a run — never on a return from
+Section 8, whose re-review re-enters below at the cards — one card with one
+question and three choices, the recommended one first:
+
+| Choice | What happens |
+|--------|--------------|
+| **Go through the findings one by one** (recommended) | Continue to the cards below |
+| **Show the full report and stop** | Print Section 5's full report — the shape with the `[Findings]` list — without its hint line, then Section 8's *Handing off to implementation* block for a `READY` plan; write nothing, and stop |
+| **Stop at the verdict** | Print nothing more — except Section 8's *Handing off to implementation* block for a `READY` plan — write nothing, and stop |
+
+Skip the entry card when the header block counts nothing — no `Blocker`,
+`Major` or `Minor` at all, whether or not `Reject` entries were printed. A
+degradation finding counts there like any other, so a document whose only
+finding is one still gets the card. The compact header
+is then the whole output, and a `READY` plan still gets Section 8's *Handing
+off to implementation* block. The card exists so that a reader who wants the
+wall can have it, and so that a run started out of habit can be left without a
+write.
 
 ### Order: Ask before Fix now
 
-Resolve every `Ask` **before** applying any `Fix now`. Design decisions cascade
-into the mechanical edits: deciding "SQLite, not Redis" changes every later
-section that mentions Redis. Applying the mechanical fixes first means redoing
-them.
+On each card, put the section's `Ask` questions before its `Fix now`
+questions, and collect every answer before applying anything. Design decisions
+cascade into the mechanical edits: deciding "SQLite, not Redis" changes every
+later section that mentions Redis. Applying the mechanical fixes first means
+redoing them — which is why Section 7 applies the whole batch at once, after
+the last card.
 
 ### One card per section
 
-Walk the document's sections in order. For each section that has `Ask` items,
-put its questions to the user as **one multiple-choice card, at most four
-questions**. Sections with no `Ask` items produce no card. If a section has
+Walk the document's sections in order. For each section that has findings —
+`Ask` and `Fix now` alike — put its questions to the user as **one
+multiple-choice card, at most four questions**. Sections with no findings
+produce no card. If a section has
 more than four, take the four highest-severity ones and put the rest on the
 next card for that section.
 
 A `§whole` finding belongs to no section, so the walk on its own would never
-reach it. Put every `§whole` `Ask` on a **first card, before the walk starts**,
+reach it. Put every `§whole` finding on a **first card, before the walk starts**,
 under the same four-question limit and the same overflow rule. This is not an
 edge case: `§whole` is the location for anything the document does not contain
 at all, which is where most of D, G, H, I and J land, and **both** of Section
 4's degradation findings are `§whole` `Ask`s. Dropping them would leave the
 two findings that exist to keep a degraded review off `READY` as the only ones
 the user is never asked about, and would make Section 7's precondition —
-every `Ask` answered — impossible to satisfy.
+every question answered — impossible to satisfy.
 
-When `FORMAT_OK` is `0` there are no sections to walk at all. Every `Ask` is
+When `FORMAT_OK` is `0` there are no sections to walk at all. Every finding is
 then located either by `§whole` or by a quoted line, so there is nothing for
-the walk to visit: put them all on cards in `ASK_ITEMS` order under the same
+the walk to visit: put them all on cards in `ASK_ITEMS` order — the same
+ordering applied to `FIX_ITEMS`, the two interleaved by location — under the same
 four-question limit — the `§whole` ones on the first card as above, then the
 line-located ones in file order. Without this the walk reaches none of them in
-a formatless document, and Section 7's precondition — every `Ask` answered —
-could never be met, on the one document that always carries at least one
+a formatless document, and Section 7's precondition — every question
+answered — could never be met, on the one document that always carries at least one
 `Ask` (Section 4's `FORMAT_OK` degradation).
 
 Grouping by section keeps related questions together, and most documents only
-have `Ask` items in a couple of sections.
+have findings in a couple of sections.
 
 On a second or later pass, carry every answer from the earlier passes with you.
-An `Ask` the user has already answered — including one answered "keep the
-document as written" — is settled, and is never put to them again, even when
-the re-review re-detects the finding behind it.
+A finding the user has already answered — an `Ask` with a choice, a `Fix now`
+applied or kept, including either answered "keep the document as written" —
+is settled, and is never put to them again, even when the re-review re-detects
+the finding behind it.
 
 ### Building the choices
 
+Every question shows the finding as the report would: its heading line, then
+`Problem:`, `Before:` and `After:` — the reader decides from the same three
+lines Section 5 prints, never from a summary of them, and under the same
+labels in the conversation's language that Section 5 chose.
+
+A `Fix now` question has two choices: **Apply** (recommended) — write the
+`After:` text in place of the `Before:` text — and **Keep the document as
+written**. An `Ask` question has the finding's alternatives from its *proposed
+text*, the recommended one first, then **Keep the document as written**; the
+four-choice limit leaves room for three alternatives, so when the *proposed
+text* holds more, offer the three strongest and say in the question that
+another can be typed as free text. Free text is an answer on either kind of
+question — the harness always offers it.
+
 Every question offers between two and four choices. **Keep the document as
 written** — leave it alone, and say plainly that the finding stays unresolved
-and the verdict stays `NOT READY` — is one of them on **every** question,
-without exception.
+and counted, and that a `Blocker`, a `Major` or an `Ask` kept this way holds
+the verdict at `NOT READY` (a kept `Minor` `Fix now` alone does not: Section
+4's formula never counted it) — is one of them on **every** question, without
+exception.
 
 When the finding is a Perspective C mismatch, one of the other choices must be
 **Match the repository** — change the document to agree with what is actually
@@ -98,8 +146,20 @@ this is the one answer that clears this finding by supplying what was missing
 rather than by editing the document. If the path does not resolve either, say so
 and leave the finding unresolved.
 
+The choices on a card are the ones the finding's *proposed text* listed — what
+the report's `After:` line showed — each with its one-line trade-off, plus
+*Keep the document as written*. The fixed choices this section prescribes are
+part of that proposed text by construction: Section 4 records the degradation
+choices above as those findings' `After:`, and for a Perspective C mismatch
+the reviewer writes *Match the repository* into the alternatives at Section 3.
+A card that offers any other choice the report did not show is a report that
+failed to preview the question.
+
 ```
-Q1 [§3.2] The state storage mechanism is TBD
+Q1  [Blocker] §3.2 A Completeness — Ask
+    Problem: The state storage mechanism is still TBD, so an implementer cannot tell what to build.
+    Before:  The storage mechanism for cached entries is TBD.
+    After:   one of the choices below
 
   ○ Use the existing SQLite store
      → no new dependency; follows the pattern already in db/
@@ -124,17 +184,33 @@ Record each answer against its finding. Do not apply anything yet.
 
 | Value | Content |
 |-------|---------|
-| `ANSWERS` | One entry per `Ask` put to the user: the finding it belongs to, and the answer — a choice, free text, or "keep the document as written" |
+| `ANSWERS` | One entry per finding put to the user — `Ask` and `Fix now` alike: the finding it belongs to, and the answer — a choice, *apply*, free text, or "keep the document as written" |
 
 `ANSWERS` is the only carried value the user produced, and Section 8 reads it
 on every later pass to tell a settled `Ask` from a new one. Carry it the way
 Section 1 says to carry everything: in your context, restated as you go. It
 accumulates across passes and is never reset.
 
+### When a question is refused
+
+A call to the question tool can be refused after Section 1 found the tool
+listed — a permission setting, a harness that lists it but denies it. Treat a
+refusal at the entry card or at any card after it the same way: set
+`INTERACTIVE` to `0`, say in one line that the run fell back because a
+question could not be put, print Section 5's full report without its hint
+line, and stop **without writing** — including the answers already collected
+on earlier cards. If an earlier pass of this run already wrote a batch, print
+Section 8's *Completion output* for it after the report: those edits are in
+the file whether or not this pass could go on, and the reader must see them.
+Section 7 writes once per pass and only after every
+question is answered; a batch built from half the answers is neither. The
+user re-runs in a session that can answer, or with `--report-only` to say the
+report was all they wanted.
+
 ## Section 7: Applying changes
 
-Once **every** `Ask` in the document has an answer, apply the answers together
-with every `Fix now` in a **single pass** over the file.
+Once **every** question — `Ask` and `Fix now` alike — has an answer, apply the
+answers in a **single pass** over the file.
 
 Writing exactly once per pass is deliberate. The file is only ever changed as
 one batch of targeted edits: a session interrupted anywhere in Sections 3-6
@@ -147,8 +223,9 @@ The batch itself is **not** atomic — it is several targeted edits, and one can
 fail part way through. The write-failure rule below is what covers that case;
 do not read "one batch" as a guarantee that no half-edited state can exist.
 
-If there is nothing to apply — no `Ask` was answered with a change and
-`FIX_ITEMS` is empty — **write nothing** and go straight to Section 8. A clean
+If there is nothing to apply — no `Ask` was answered with a change and no
+`Fix now` was answered *Apply* — **write nothing** and go straight to Section
+8. A clean
 document is the expected happy path, and rewriting it to change nothing is not
 a no-op: it risks paraphrasing prose no finding asked you to touch.
 
@@ -157,6 +234,20 @@ Rules:
 - An `Ask` answered with "keep the document as written" produces **no edit**.
   The finding stays open.
 - A `Reject` produces no edit.
+- A `Fix now` answered **Keep the document as written** produces no edit
+  either. It stays open and counted at its severity — a kept `Blocker` or
+  `Major` holds the verdict at `NOT READY`, a kept `Minor` alone leaves
+  Section 4's formula where it was — and is listed under *Kept as written* in
+  the completion output.
+- A `Fix now` whose `After:` presupposes something an `Ask` in the same batch
+  has just changed — it still names Redis after the user chose SQLite — is
+  **superseded**: do not apply it as shown, and do not rewrite it either, since
+  the user never saw a rewritten version. List it under *Kept as written* with
+  the tag *superseded*; Section 8's re-review raises it again against the new
+  text, where it comes back with an `After:` that fits and goes on a card.
+- A `Fix now` is applied as the finding's *proposed text* — the lines the
+  report's `After:` showed, in place of its `Before:`. The report is the
+  preview of this pass; an edit that differs from it is one the user never saw.
 - Preserve the document's existing heading structure and style. Do not reformat
   sections you are not changing. The one exception is an `Ask` answered
   **Restructure the document into the superpowers shape** — Section 6's choice
@@ -170,8 +261,8 @@ Rules:
   `Verdict: ❌ NOT READY` line as the last line of that report, with the counts
   from the report you already have. Without it the last `^Verdict:` line in the
   run is the one from *before* any edit — a verdict describing a file that has
-  since been half-rewritten, and exactly the stale read Section 4 warns a
-  `--fix` caller about. A partial write is never `READY`, whatever the counts
+  since been half-rewritten, and exactly the stale read Section 4 warns an
+  interactive run's caller about. A partial write is never `READY`, whatever the counts
   said beforehand.
 
 After writing, continue to Section 8.
@@ -195,11 +286,11 @@ then runs for real against a spec Section 3 never saw. Its findings — coverage
 gaps that are routinely `Blocker`s — are not in the report you just emitted, and
 taking the shortcut would drop them and the verdict they change. When
 `SPEC_FILE` was set this pass and Section 7 wrote nothing, re-run Sections 3 and
-4 anyway and re-emit Section 5's report; only the document is unchanged, so
+4 anyway and re-emit Section 5's compact header; only the document is unchanged, so
 re-use Perspective C's results exactly as the *Otherwise* branch below does.
 
 Otherwise, re-run Sections 3 and 4 against the written file and re-emit
-Section 5's report, then compare what it found against what this run has
+Section 5's compact header, then compare what it found against what this run has
 already settled. Re-run Section 2's *Format check* as well, and its *Spec
 cross-reference* when the batch touched a plan's `Spec:` line. `FORMAT_OK` and
 `SPEC_FILE` are Section 2 values and Section 4's degradation table reads both,
@@ -217,19 +308,19 @@ by the directories the document touches, so a batch that added a path under a
 directory with its own CLAUDE.md means reading that file now, off the listing
 you already have.
 You are using those sections as a subroutine: **their own routing does not
-apply here.** Section 5's closing line sends a `--fix` run to Section 6 —
-ignore it and come back to this section instead. (Section 5's `--fix` hint
-needs no such exemption: its own condition already requires `FIX_MODE` to be
-`0`, and it never is on this path.)
+apply here.** Section 5's closing line sends an interactive run to Section 6 —
+ignore it and come back to this section instead. (Section 5's hint needs no
+such exemption: its own condition already requires `INTERACTIVE` to be `0`,
+and it never is on this path.)
 
-Go back to Section 6 only for a **new `Ask`, at any severity** — meaning one
-this run has neither resolved nor had declined. Disposition routes here;
-severity does not. A new `Blocker` is a question only when its disposition is
-`Ask`, and a new `Minor` `Ask` is a question just the same — routing on severity
-instead would send a new `Blocker` whose answer is uniquely determined to
-Section 6 with nothing to ask about. A finding whose `Ask` the user has already
-answered is neither: it is settled, it stays settled, and settled means it is
-not put to them again. Restate its recorded outcome and move on.
+Go back to Section 6 for every **new finding, at any severity and either
+disposition** — meaning one this run has neither resolved, applied, nor had
+declined. A new `Blocker` and a new `Minor` are questions just the same: the
+cards are how every counted finding reaches the user, and severity only
+orders them on the card. A finding the user has already answered — an `Ask`
+with a choice, a `Fix now` applied or kept — is neither: it is settled, it
+stays settled, and settled means it is not put to them again. Restate its
+recorded outcome and move on.
 
 **A finding this run dispositioned `Reject` is settled on the same terms.** It
 produces no edit, so the re-review detects it again on every later pass, exactly
@@ -266,12 +357,12 @@ open `Ask` as it is as `NOT READY` forever.
 `finalize.md` carries the same rule for the same reason — without it the loop
 ping-pongs on one contested finding until the cap fires.
 
-A **new `Fix now`, at any severity**, needs no question, so it does not go back
-to Section 6 — it goes back to **Section 7** and is applied in the next batch.
-Both return paths cost a pass and are counted below. When one re-review turns
-up both a new `Ask` and a new `Fix now`, that is still a single pass, not two:
-Section 6's *Ask before Fix now* order holds, so go to Section 6 and then fall
-through to Section 7 with the new `Fix now` items in the same batch.
+A **new `Fix now`** goes back to Section 6 like a new `Ask`: it is put on a
+card, and applied in the next batch only if the user takes it. When one
+re-review turns up both a new `Ask` and a new `Fix now`, that is still a
+single pass, not two: Section 6's *Ask before Fix now* order holds on the
+card, and Section 7 applies both answers in the same batch. The return path
+costs a pass and is counted below.
 
 When the re-review turns up **neither** — no new `Ask` and no new `Fix now` —
 the loop has converged: do not go back, and continue to *Completion output*
@@ -279,26 +370,25 @@ below with the verdict this re-review produced. Falling through is the exit.
 Nothing else has to fire for the loop to end, and the cap is the other exit,
 not the only one.
 
-"New" means on this axis what it means on the `Ask` axis: one this run has not
-already applied. A `Fix now` this run *did* apply and the re-review still
+"New" means on this axis what it means on the `Ask` axis: one this run has
+neither applied nor had declined. A `Fix now` this run *did* apply and the re-review still
 detects is **not** new — the edit did not land what it was for. Do not send it
 round again to be re-applied blind; report it in the completion output exactly
 as a re-detected answered `Ask` is reported, as an applied change that did not
 take. Either way it keeps its severity and its place in the counts, so a
 `Blocker` whose fix did not land still holds the document at `NOT READY`.
 
-Section 4 promises that
-every `Fix now` is applied automatically under `--fix`; routing only
+Section 4 promises that every counted finding reaches the user; routing only
 `Blocker`/`Major`/`Ask` back would break that promise for a `Minor` `Fix now`
 the re-review turned up, and drop it without a word. If the cap fires with
-`Fix now` items still unapplied, **list them in the completion output** rather
-than dropping them.
+findings that were never put on a card, **list them in the completion
+output** rather than dropping them.
 
 Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
 bash block may run as a separate shell, and this command writes no state files.
 Start it at 1 the first time you reach this section, and add one each time you
-return to it. Before going back to Section 6 or 7, stop when the count is
+return to it. Before going back to Section 6, stop when the count is
 **greater than or equal to** the cap — the same `-ge` test `finalize.md` uses,
 so the default cap of 3 allows three passes and no fourth.
 
@@ -353,10 +443,11 @@ the cap is a result, not an error.
 It is usually `NOT READY` — the cap only fires while something is still routing
 back — but do not assume it. A cap that fires with nothing outstanding but a
 `Minor` `Fix now` leaves `Blocker 0 / Major 0 / Ask 0`, which is `READY` by the
-formula in Section 4. Report whatever the formula gives, list the unapplied
-`Fix now` items beside it, and when that verdict is `READY` say in one line
-that it was reached with fixes still unapplied — including above the *Handing
-off to implementation* block, which a `READY` plan reaches on this path too.
+formula in Section 4. Report whatever the formula gives; list the findings the
+cap kept from reaching a card under *Kept as written* with the tag
+*cap reached, not asked*; and when that verdict is `READY` print the one line
+*Completion output* item 3 prescribes — including above the *Handing off to
+implementation* block, which a `READY` plan reaches on this path too.
 
 ### What to carry forward
 
@@ -366,21 +457,31 @@ off to implementation* block, which a `READY` plan reaches on this path too.
 
 ### Completion output
 
-Emit three things:
+Emit four things:
 
 1. The verdict from the final re-review
 2. A bulleted summary of what changed
-3. A pointer to `git diff` for the details
+3. A bulleted list of what the user kept as written — every finding answered
+   *Keep the document as written*, `Ask` or `Fix now`, with its disposition —
+   omitted when empty. When the verdict is `READY` and this list is not, say
+   in one line above the list that `READY` was reached with findings kept as
+   written or never put to the user — the cap path prints this same line —
+   including above the *Handing off to implementation* block
+4. A pointer to `git diff` for the details
 
 ```
 ── Re-review after fixes ──
-Verdict: ✅ READY   Blocker 0 / Major 0 / Minor 1 / Ask 0
+Verdict: ❌ NOT READY   Blocker 0 / Major 1 / Minor 1 / Ask 1
 
 Applied:
   • §3.2  state storage: TBD → SQLite (your answer)
   • §3    retry count: unified on 3 (§2 was authoritative)
   • §7    added a test strategy section
   • §6.3  unified "job" / "task" terminology
+
+Kept as written:
+  • §5    error handling left undefined (Ask, kept)
+  • §whole  no hit/miss counter (Fix now, kept)
 
 Review the changes with: git diff -- '<target file>'
 ```
@@ -396,14 +497,17 @@ is why four bullets do not account for every count that report carried.
 
 When Section 7 wrote nothing, the header is wrong too: no fixes were applied,
 so title that block `── No changes applied ──` rather than
-`── Re-review after fixes ──`. Items 2 and 3 also have no subject: emit
+`── Re-review after fixes ──`. Items 2 and 4 also have no subject: emit
 the verdict, say in one line **why** nothing was written, and print no
-`Applied:` list and no `git diff` pointer. An empty bullet list under
+`Applied:` list and no `git diff` pointer. The *Kept as written* list (item
+3) is printed whenever it has entries — on this path it usually holds every
+finding the user declined, and that list is the record of why nothing was
+written. An empty bullet list under
 `Applied:` and a diff pointer at an unchanged file both read as "something
 happened here" when nothing did.
 The three reasons are not interchangeable: *no change was needed* when there was
 nothing to apply; *every proposed change was declined* when the file is
-unchanged because each `Ask` was answered "keep the document as written"; and
+unchanged because every card was answered "keep the document as written"; and
 *the companion spec was supplied and the plan re-reviewed against it* on the one
 path where Section 7 writes nothing and the *Loop* above re-reviews anyway —
 Section 6's *The spec is at this path* set `SPEC_FILE`. Reporting the second as
@@ -435,7 +539,7 @@ if git ls-files --error-unmatch -- "$FORGE_TARGET" >/dev/null 2>&1; then
   # reader pastes: keep it, and the path, byte for byte.
   #
   # Single-quote the path: this line is a command the reader copies and runs,
-  # and the same rule Section 5 puts on the `--fix` hint applies here — an
+  # and the same rule Section 5 puts on the hint applies here — an
   # unquoted `docs/my design/foo.md` pastes as two pathspecs and diffs neither.
   # Escape each `'` in the path as `'\''` first, so one rule covers every path.
   # There is no un-quotable path, and printing one bare is not a safe fallback:

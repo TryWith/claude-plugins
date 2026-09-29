@@ -335,3 +335,39 @@ it was written; and the *Spec cross-reference* rerun now says that its "read
 every hit" means every design-document candidate, excluding the `CLAUDE.md` and
 own-plugin hits the merged Stage 3 carries, which a plan with no companion spec
 would otherwise rank as its spec.
+
+**Report format and challenge step, on 1.8.0, not re-evaluated.** Three
+changes to the skill text after the paragraphs above. Section 5's findings
+list moved from four lines per finding (finding, `→` consequence, disposition
+with a reason) to a heading line carrying the disposition and three labelled
+lines — `Problem:` (at most two plain sentences), `Before:` (the document's
+text verbatim) and `After:` (the replacement, or the choices for an `Ask`) —
+and Section 3's finding record gained the two fields that feed them. The
+severity and disposition labels stopped being English keys: nothing greps
+them, so they now follow the conversation's language, one fixed word each, and
+`pattern-samples.json` carries a verdict line with translated counts to show
+the `^Verdict:` graders never read them. And Section 3 gained *Challenge every
+finding*, a mandatory refutation pass before Section 4 that re-greps every
+quote, re-runs every repository claim and reads every proposed fix against the
+rest of the document, turning what fails into a `Reject`; Section 5 prints its
+counts under the header block. No grader reads the finding format — the regex
+graders match `^Verdict:` and `NOT READY`, and every llm rubric accepts any
+wording — so the scores above are expected to hold, but `02`'s `not-fooled`
+and `03`/`08`'s `no-false-missing` are the rows to read first on the next run,
+being the two the challenge step most directly bears on.
+
+**Interactive default, on 2.0.0, not re-evaluated.** The skill's default
+mode is now interactive: Section 5 prints a compact header (verdict line,
+header block, challenge line, `Reject` entries) and Section 6 puts every
+surviving finding — `Ask` and `Fix now` alike — to the user as multiple-choice
+cards, behind an entry card that can show the full report instead. The
+report-only behaviour this suite records is reached by `--report-only`, or
+automatically when the AskUserQuestion tool is not available — which is the
+case for every run here, since `allowed_tools` lists `[Read, Glob, Grep,
+Skill, Bash]`. So the eight cases are expected to run as before and score as
+above; the rows to read first on the next run are `01` (does the fallback
+print the full report, findings list included, with the `^Verdict:` line) and
+`05` (does `--fx` still draw the `--fix` suggestion now that `--report-only`
+is the second accepted flag). The interactive path cannot be graded — no
+grader can answer a card — and is checked by hand in a `claude --plugin-dir`
+session on the `01` fixture.

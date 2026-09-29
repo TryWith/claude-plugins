@@ -19,30 +19,46 @@
 | Argument | Meaning |
 |----------|---------|
 | `<path>` | The document to review. Optional — see Section 2 when omitted. |
-| `--fix` | Continue past the report: resolve `Ask` items, apply changes, re-review. |
+| `--report-only` | Stop at the report: write nothing, ask nothing after target resolution. The flag for CI, hooks and headless runs. |
+| `--fix` | Accepted for compatibility; it changes nothing, because the run it used to switch on is now the default (see `INTERACTIVE` below). |
 
-`--fix` is a flag, not a value. Strip every `--`-prefixed token from the
+Both are flags, not values. Strip every `--`-prefixed token from the
 argument list **before** resolving `<path>`; `<path>` is the first token that
-remains, and the order the two are typed in does not matter. If nothing
+remains, and the order the tokens are typed in does not matter. If nothing
 remains, `<path>` was omitted — take the staged search in Section 2. Never
-treat `--fix` itself as a path.
+treat a flag itself as a path.
 
 **Quotes group.** A single- or double-quoted argument is **one** token however
-many spaces it holds, so `/forge:review-design "docs/my design/foo.md" --fix`
+many spaces it holds, so `/forge:review-design "docs/my design/foo.md" --report-only`
 resolves to one path; strip the quotes before using the value. Inside a
 double-quoted argument, `\"` is a literal double quote and `\\` a literal
 backslash. That pair is what lets **one** quoting form cover every path,
 including a path holding both quote characters — without it there is a shape
 Section 5 can print and this section cannot decode. Section 5's rule that the
-`--fix` hint quotes the path has nothing to lean on without this, and would
+hint quotes the path has nothing to lean on without this, and would
 print a hint this section then rejects as two paths.
 
-Stripping is not the same as ignoring. `--fix` is the **only** flag this
-command accepts, so any other `--`-prefixed token is a typo, and any second
-remaining token is a second path. Both are errors: name the token and stop
-rather than running on. Silently discarding `--fx` runs a report-only pass
-while the user believes fixes are being applied — the one failure mode where
-saying nothing is worse than refusing.
+Stripping is not the same as ignoring. `--report-only` and `--fix` are the
+**only** flags this command accepts, so any other `--`-prefixed token is a
+typo, and any second remaining token is a second path. Both are errors: name
+the token, say which flag it most resembles, and stop rather than running on.
+Silently discarding `--fx` runs a pass the user did not ask for, and silently
+discarding `--reprot-only` in a session that can ask runs the interactive
+pass the caller meant to switch off — the one failure mode where saying
+nothing is worse than refusing.
+
+**`INTERACTIVE` is decided here, once.** It is `1` — the default — unless
+`--report-only` was passed or the AskUserQuestion tool is not among the tools
+this session can call, in which case it is `0`. `--fix` does not enter into
+it: questions are on by default, and the flag neither adds nor removes them.
+When both flags are present `--report-only` wins, since stopping at the report
+is the safe direction. Sections 2, 5 and 6 route on this value: `0` means the
+run asks nothing after target resolution, writes nothing, and ends with
+Section 5's full report; `1` means Section 5 prints its compact header and
+Section 6 puts the findings to the user as cards. One later event can flip it
+to `0`: a call to the question tool that is refused although the tool was
+listed. Section 6 says what to do then — print the full report, write nothing,
+stop — and nothing else changes it.
 
 **Values do not survive between bash blocks.** Each block may run as a separate
 shell, so a variable assigned in one block is gone in the next. Do not write
@@ -324,10 +340,10 @@ header line. Resolve the companion spec in this order:
    a spec can sit at `docs/architecture-design.md` with no `specs/` component at
    all. Rank the hits by date-and-topic match against the plan's filename and
    take the best; if two or more tie, or the best match is only a guess, ask
-   rather than pick — **but only when `FIX_MODE` is `1`.** A report-only run
+   rather than pick — **but only when `INTERACTIVE` is `1`.** A report-only run
    never asks anything a self-typing `<path>` did not already settle, and this
    step is reached with such a path on the recommended unattended route. When
-   `FIX_MODE` is `0`, take no spec: record the "no companion spec" degradation
+   `INTERACTIVE` is `0`, take no spec: record the "no companion spec" degradation
    below, name the tied or guessed candidates in it so the reader can pass one
    explicitly, and continue. Stage 3 alone: it is rooted at `.` and Stage 2
    at `docs/`, so it already returns everything Stage 2 would, and running both
@@ -416,7 +432,7 @@ later commands:
 | `TARGET_FILE` | `docs/superpowers/specs/2026-08-29-foo-design.md` |
 | `DOC_TYPE` | `spec` |
 | `SPEC_FILE` | (empty for a spec; the companion path for a plan) |
-| `FIX_MODE` | `0` — set to `1` when `--fix` was passed |
+| `INTERACTIVE` | `1` — set to `0` when `--report-only` was passed or the question tool is not available (Section 1) |
 | `FORMAT_OK` | `1` — set to `0` when the format check found no `##` headings, or found the document does not follow the superpowers shape |
 
 **`TARGET_FILE` and `SPEC_FILE` never go into a shell command as text.** Both
