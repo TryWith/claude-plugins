@@ -43,8 +43,9 @@ Stripping is not the same as ignoring. `--report-only` and `--fix` are the
 typo, and any second remaining token is a second path. Both are errors: name
 the token, say which flag it most resembles, and stop rather than running on.
 Silently discarding `--fx` runs a pass the user did not ask for, and silently
-discarding `--reprot-only` puts questions to a CI job that cannot answer them
-— the one failure mode where saying nothing is worse than refusing.
+discarding `--reprot-only` in a session that can ask runs the interactive
+pass the caller meant to switch off — the one failure mode where saying
+nothing is worse than refusing.
 
 **`INTERACTIVE` is decided here, once.** It is `1` — the default — unless
 `--report-only` was passed or the AskUserQuestion tool is not among the tools

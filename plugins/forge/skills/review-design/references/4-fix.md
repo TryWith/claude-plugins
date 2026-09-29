@@ -19,23 +19,27 @@
 ## Section 6: Putting findings to the user
 
 Reached only when `INTERACTIVE` is `1`, from Section 5's compact header. Every
-finding that survived Section 3's challenge — `Ask` and `Fix now` alike — is
-put to the user here as a question on a card; a `Reject` never is, since
-there is nothing to choose about it and the compact header already showed it.
+counted finding — those that survived Section 3's challenge and Section 4's
+degradation findings, `Ask` and `Fix now` alike — is put to the user here as a
+question on a card; a `Reject` never is, since there is nothing to choose
+about it and the compact header already showed it.
 
 ### Entry card
 
-Before any finding is put to the user, one card with one question and three
-choices, the recommended one first:
+On the first arrival at this section in a run — never on a return from
+Section 8, whose re-review re-enters below at the cards — one card with one
+question and three choices, the recommended one first:
 
 | Choice | What happens |
 |--------|--------------|
 | **Go through the findings one by one** (recommended) | Continue to the cards below |
-| **Show the full report and stop** | Print Section 5's full report — the shape with the `[Findings]` list — without its hint line, write nothing, and stop |
-| **Stop at the verdict** | Print nothing more, write nothing, and stop |
+| **Show the full report and stop** | Print Section 5's full report — the shape with the `[Findings]` list — without its hint line, then Section 8's *Handing off to implementation* block for a `READY` plan; write nothing, and stop |
+| **Stop at the verdict** | Print nothing more — except Section 8's *Handing off to implementation* block for a `READY` plan — write nothing, and stop |
 
-Skip the entry card when no finding survived the challenge — there is nothing
-to choose — whether or not `Reject` entries were printed. The compact header
+Skip the entry card when the header block counts nothing — no `Blocker`,
+`Major` or `Minor` at all, whether or not `Reject` entries were printed. A
+degradation finding counts there like any other, so a document whose only
+finding is one still gets the card. The compact header
 is then the whole output, and a `READY` plan still gets Section 8's *Handing
 off to implementation* block. The card exists so that a reader who wants the
 wall can have it, and so that a run started out of habit can be left without a
@@ -144,11 +148,18 @@ and leave the finding unresolved.
 
 The choices on a card are the ones the finding's *proposed text* listed — what
 the report's `After:` line showed — each with its one-line trade-off, plus
-*Keep the document as written*. A card that offers a choice the report did not
-is a report that failed to preview the question.
+*Keep the document as written*. The fixed choices this section prescribes are
+part of that proposed text by construction: Section 4 records the degradation
+choices above as those findings' `After:`, and for a Perspective C mismatch
+the reviewer writes *Match the repository* into the alternatives at Section 3.
+A card that offers any other choice the report did not show is a report that
+failed to preview the question.
 
 ```
-Q1 [§3.2] The state storage mechanism is TBD
+Q1  [Blocker] §3.2 A Completeness — Ask
+    Problem: The state storage mechanism is still TBD, so an implementer cannot tell what to build.
+    Before:  The storage mechanism for cached entries is TBD.
+    After:   one of the choices below
 
   ○ Use the existing SQLite store
      → no new dependency; follows the pattern already in db/
@@ -188,7 +199,10 @@ refusal at the entry card or at any card after it the same way: set
 `INTERACTIVE` to `0`, say in one line that the run fell back because a
 question could not be put, print Section 5's full report without its hint
 line, and stop **without writing** — including the answers already collected
-on earlier cards. Section 7 writes once per pass and only after every
+on earlier cards. If an earlier pass of this run already wrote a batch, print
+Section 8's *Completion output* for it after the report: those edits are in
+the file whether or not this pass could go on, and the reader must see them.
+Section 7 writes once per pass and only after every
 question is answered; a batch built from half the answers is neither. The
 user re-runs in a session that can answer, or with `--report-only` to say the
 report was all they wanted.
@@ -225,6 +239,12 @@ Rules:
   `Major` holds the verdict at `NOT READY`, a kept `Minor` alone leaves
   Section 4's formula where it was — and is listed under *Kept as written* in
   the completion output.
+- A `Fix now` whose `After:` presupposes something an `Ask` in the same batch
+  has just changed — it still names Redis after the user chose SQLite — is
+  **superseded**: do not apply it as shown, and do not rewrite it either, since
+  the user never saw a rewritten version. List it under *Kept as written* with
+  the tag *superseded*; Section 8's re-review raises it again against the new
+  text, where it comes back with an `After:` that fits and goes on a card.
 - A `Fix now` is applied as the finding's *proposed text* — the lines the
   report's `After:` showed, in place of its `Before:`. The report is the
   preview of this pass; an edit that differs from it is one the user never saw.
@@ -368,7 +388,7 @@ Count the passes yourself. The count lives in your context alongside
 `TARGET_FILE` and the other carried values, for the same reason they do: each
 bash block may run as a separate shell, and this command writes no state files.
 Start it at 1 the first time you reach this section, and add one each time you
-return to it. Before going back to Section 6 or 7, stop when the count is
+return to it. Before going back to Section 6, stop when the count is
 **greater than or equal to** the cap — the same `-ge` test `finalize.md` uses,
 so the default cap of 3 allows three passes and no fourth.
 
@@ -423,10 +443,11 @@ the cap is a result, not an error.
 It is usually `NOT READY` — the cap only fires while something is still routing
 back — but do not assume it. A cap that fires with nothing outstanding but a
 `Minor` `Fix now` leaves `Blocker 0 / Major 0 / Ask 0`, which is `READY` by the
-formula in Section 4. Report whatever the formula gives, list the unapplied
-`Fix now` items beside it, and when that verdict is `READY` say in one line
-that it was reached with fixes still unapplied — including above the *Handing
-off to implementation* block, which a `READY` plan reaches on this path too.
+formula in Section 4. Report whatever the formula gives; list the findings the
+cap kept from reaching a card under *Kept as written* with the tag
+*cap reached, not asked*; and when that verdict is `READY` print the one line
+*Completion output* item 3 prescribes — including above the *Handing off to
+implementation* block, which a `READY` plan reaches on this path too.
 
 ### What to carry forward
 
@@ -444,8 +465,8 @@ Emit four things:
    *Keep the document as written*, `Ask` or `Fix now`, with its disposition —
    omitted when empty. When the verdict is `READY` and this list is not, say
    in one line above the list that `READY` was reached with findings kept as
-   written — the same line the cap path prints — including above the
-   *Handing off to implementation* block
+   written or never put to the user — the cap path prints this same line —
+   including above the *Handing off to implementation* block
 4. A pointer to `git diff` for the details
 
 ```

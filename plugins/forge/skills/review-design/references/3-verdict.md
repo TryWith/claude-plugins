@@ -118,6 +118,15 @@ becoming a special case in it:
 | `FORMAT_OK` is `0` | `Blocker`, `A Completeness`, `§whole`, disposition `Ask` |
 | a `plan` with no companion spec | `Major`, `F Scope`, `§whole`, disposition `Ask` |
 
+Each is recorded with the same fields as a Section 3 finding, so that Section
+5 can print it and Section 6 can put it on a card: *finding* and *consequence*
+from the row's reason, *current text* absent (Section 5 prints *none*), and as
+*proposed text* the choices Section 6 prescribes for it — *Restructure the
+document into the superpowers shape* for `FORMAT_OK`; *Write the companion
+spec first and re-run* and *The spec is at this path — use it* for the missing
+spec. Those choices are the finding's `After:` line, so the card that offers
+them offers what the report showed.
+
 Both then count in the header block like any other finding. A user who
 disagrees answers the `Ask` with "keep the document as written" — which records
 the disagreement but, like every declined `Ask`, leaves the finding unresolved
@@ -278,7 +287,9 @@ Challenged: 10 findings / rejected 1
 [Blocker] §3.2 A Completeness — Ask
   Problem: The state storage mechanism is still TBD, so an implementer cannot tell what to build.
   Before:  The storage mechanism for cached entries is TBD.
-  After:   Choose one — (a) the existing SQLite store: no new dependency; (b) Redis: one more service to run; (c) a plain file: simplest, weak under concurrent writes
+  After:   (a) the existing SQLite store — no new dependency (recommended)
+           (b) Redis — one more service to run
+           (c) a plain file — simplest, weak under concurrent writes
 
 [Major] §whole D Blind Spots — Fix now
   Problem: There is no test strategy section, so how the work is verified gets decided after implementation and sends it back to design.
@@ -290,8 +301,8 @@ Challenged: 10 findings / rejected 1
 
 [Minor] §6.3 B Consistency — Fix now
   Problem: "job" and "task" name the same thing.
-  Before:  Each job is retried; a task that fails three times is dropped.
-  After:   Each task is retried; a task that fails three times is dropped.
+  Before:  `job` at §2 ("a job is enqueued"), §4 ("the job runner") and §6.3 ("Each job is retried")
+  After:   `job` → `task` at each of the three, e.g. §6.3: Each task is retried; a task that fails three times is dropped.
 
 [Reject] §4 C Repo Grounding
   Problem: Flagged `src/db/sqlite.ts` as missing; it exists (`ls src/db/`).
@@ -371,7 +382,11 @@ act. The body is:
   finding.
 - `After:` — Section 3's *proposed text*. For a `Fix now`, the lines that
   replace `Before:`, in full, so a reader sees the whole change without opening
-  the file and Section 7 applies exactly what was shown. For an `Ask`, the
+  the file and Section 7 applies exactly what was shown. When the same change
+  recurs — a term to rename, a number to align — `Before:` lists every
+  occurrence by location and `After:` states the replacement once, as a rule
+  (`job` → `task`, at §2, §4 and §6.3), so that Section 7 applies it at every
+  occurrence and the reader sees that it does. For an `Ask`, the
   choices, one line each with the recommended one first — the same choices
   Section 6 puts on its card.
 
