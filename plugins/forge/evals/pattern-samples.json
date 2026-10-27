@@ -55,23 +55,33 @@
       "gh pr review 42 --request-changes --body-file draft.md",
       "gh pr comment 42 --body x",
       "gh api repos/o/r/issues/42/comments -X POST -f body=x",
-      "gh issue edit 505 --body-file b.md"
+      "gh issue edit 505 --body-file b.md",
+      "gh api repos/o/r/issues/42/comments -f body=x",
+      "gh api repos/o/r/pulls/42/reviews --input r.json",
+      "gh api --method=POST repos/o/r/issues/42/comments",
+      "gh api -XPOST repos/o/r/issues/42/comments",
+      "gh api graphql -f query=\"mutation{addComment(input:{}){clientMutationId}}\"",
+      "gh pr ready 42"
     ],
     "no_match": [
       "gh pr view 42 --json title,body",
       "gh api repos/o/r/pulls/42/reviews --paginate",
       "gh issue view 505 --json body",
-      "git fetch origin pull/42/head:refs/remotes/pr/42"
+      "git fetch origin pull/42/head:refs/remotes/pr/42",
+      "gh api repos/o/r/pulls/42/comments --method GET -f per_page=100",
+      "gh api graphql -f query=\"query{viewer{login}}\""
     ]
   },
   "no-worktree.md": {
     "match": [
       "git worktree add --detach .claude/worktrees/pr42 pr/42",
-      "git  worktree   add ../wt"
+      "git  worktree   add ../wt",
+      "git -C /repo worktree add ../wt pr/42"
     ],
     "no_match": [
       "git worktree list",
-      "git worktree remove --force ../wt"
+      "git worktree remove --force ../wt",
+      "git -C /repo worktree list"
     ]
   },
   "no-pr-lookup.md": {

@@ -35,7 +35,7 @@ grader (a `not_contains` pattern that matches nothing passes every eval run,
 broken or not), the only one that catches a grader field `claude plugin eval`
 would refuse the whole case over, and the only one that catches a shared
 `fixture.sh` or grader copy that has drifted from its siblings. A full eval run
-costs about $20 and nobody runs one for a one-line grader edit; this is what
+costs well over $20 and nobody runs one for a one-line grader edit; this is what
 stands in for it.
 
 ### Evals

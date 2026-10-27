@@ -1,4 +1,7 @@
-# `/forge:review-design` eval baseline
+# `forge` eval baseline
+
+Cases `01`–`08` cover `/forge:review-design` and everything up to
+*`/forge:review-pr` cases (09–12)* is about them; that section covers the rest.
 
 The report-only behaviour of `/forge:review-design` as of `commands/review-design.md`
 at commit `d303cbf`, recorded before stage 2 moves the command into a skill.
@@ -131,6 +134,10 @@ exceeded its ceiling.
 | 01–04, 08 (full review) | $0.67–1.09 / 125–245 s / 5–16 | $1.50 / 900 / 40 |
 | 05 (stops on a bad flag) | $0.37–0.38 / 10–12 s / 1 | $0.75 / 300 / 15 |
 | 06, 07 (should not fire) | $0.27–0.53 / 41–96 s / 7–17 | $0.75 / 600 / 40 and 30 |
+| 09–12 (`/forge:review-pr`) | per run not recorded; $3.54 and $3.63 for the two runs under *`/forge:review-pr` cases* | not set / 600 / 40 (09, 12) and 30 (10, 11) |
+
+The full run now has twelve cases, so it costs more than the $21.35 recorded
+below for the original eight.
 
 Tool-call counts are not recorded: a successful run's trace is deleted with its
 temp directory. Pass `--keep-temp` when they are needed.
@@ -419,6 +426,16 @@ $3.54 and $3.63.
 | 12 | `stops-safely` | 3/3 | 0/3 |
 
 A change to `skills/review-pr/` must keep every with-plugin row at 3/3.
+The results directories of these two runs were not recorded.
+
+**Grader and skill edits, not re-evaluated.** After the runs above, a review
+widened `no-github-write` (it missed `gh api` calls that become a POST through
+`-f`/`-F`/`--input`, `--method=POST`, GraphQL mutations and `gh pr ready`) and
+`no-worktree` (it missed `git -C <dir> worktree add`), and changed the skill's
+Step 1.1 fetch (remote matched to the PR's repository, `+` refspecs, base
+fetched, SHA checked). The wider patterns can only add failures, and no run
+above executed a GitHub write or a worktree, so the scores are expected to
+hold; `09` and `12` are the rows to read first on the next run.
 
 ### Coverage limits
 

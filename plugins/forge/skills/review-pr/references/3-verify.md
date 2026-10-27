@@ -11,7 +11,12 @@ user a short plan and ask once (AskUserQuestion when available):
 - what will be created (a git worktree at the PR head, containers, a
   rebuilt local database, test accounts) and where;
 - what will be run (unit tests, E2E, browser checks, API calls) and roughly
-  how long it takes;
+  how long it takes — and, said plainly, that this **executes the PR
+  author's code** (tests, build scripts, dependency install hooks) on the
+  user's machine with the user's credentials. Name the author and say
+  whether the head comes from a fork (`isCrossRepository`,
+  `headRepositoryOwner` from Step 1.1); for a fork or an author outside the
+  organisation, recommend `--no-env` or a disposable machine;
 - what it will **not** touch (the user's checkout and branches, other
   worktrees' environments, anything remote);
 - anything that needs the user (admin rights, a secret, an installed tool).
@@ -21,13 +26,16 @@ plan did not cover. On "no", on `--no-env`, or when no question tool is
 available, skip environment work and mark those checks "pending (no
 environment)".
 
-Checks that need no environment — reading code, reading CI logs, querying
-issues, `gh` lookups — run regardless.
+Checks that need no environment and run none of the PR's code — reading
+code and tests at `pr/<n>` through git, reading CI logs, querying issues,
+`gh` lookups — run regardless. Running tests locally needs the worktree and
+dependencies, so it is environment work.
 
 ## 3.2 Environment
 
-Follow the repository's own setup documentation from Step 1.2; do not
-invent a procedure. Typically: a detached worktree at the head SHA, isolated
+Follow the repository's own setup documentation from Step 1.2 (the base
+branch's version); do not invent a procedure. If the PR changes the setup
+docs or the scripts they run, say so in the 3.1 plan before running them. Typically: a detached worktree at the head SHA, isolated
 names/ports/hosts as the docs describe, dependencies, database migrate/seed
 or rebuild (read the docs for one-time rebuild notes the PR adds), and any
 test tenant/account. Record every resource you create so Step 4 can list

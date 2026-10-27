@@ -5,12 +5,18 @@ list of what they have to do — and that nothing else is hidden further down.
 
 ## 4.1 Where to write
 
-Write two Markdown files in a location that is not tracked by git in the
-target repository (check with `git check-ignore`; if the repository has no
-such place, use a session scratch directory and tell the user the path):
+Write two Markdown files in a directory of the target repository that git
+**ignores** — confirm with `git check-ignore <dir>`. Untracked is not enough:
+an untracked, un-ignored file is swept into the next `git add -A`. If the
+repository has no ignored directory, use a session scratch directory and
+tell the user the full path; a later session will have to be given it
+(Step 1.2).
 
-- `<date>-pr<n>-review.md` — the review package (sections below)
-- `<date>-pr<n>-review-draft.md` — the review text to submit
+- `<owner>-<repo>-pr<n>-review.md` — the review package (sections below)
+- `<owner>-<repo>-pr<n>-review-draft.md` — the review text to submit
+
+The names carry no date so that a later run, and Step 5, find the previous
+package at the same path; the dates live in the header.
 
 Then print a short chat summary (4.5). Do not paste the whole package into
 the chat.
@@ -34,7 +40,8 @@ language).
 
 PR URL; reviewed head SHA (and earlier SHAs on a re-review); closing
 issues; CI state at that SHA; merge state; the verification environment and
-how it was built (or "none: --no-env").
+how it was built (or "none" with the reason: `--no-env`, the user declined,
+or no question tool was available); the date of this run.
 
 ### 2. Your to-do list (this is everything)
 

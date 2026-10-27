@@ -120,9 +120,10 @@ and, after one confirmation, a local environment with E2E and browser checks.
 It writes two Markdown files: a package that opens with **the reviewer's
 complete to-do list** (decisions, hands-on checks with expected results,
 spot-checks of the AI's evidence) followed by the full checklist as an
-appendix, and a review draft. It never posts to GitHub or decides the
-verdict; it re-checks the head commit before you submit. Pass `--no-env` to
-skip building an environment.
+appendix, and a review draft. It does not post to GitHub unless you ask it
+to, and never decides the verdict; it re-checks the head commit before you
+submit. Building an environment runs the PR's code on your machine, so the
+run asks first; pass `--no-env` to skip it.
 
 ```bash
 /forge:review-pr https://github.com/OWNER/REPO/pull/123
@@ -160,8 +161,10 @@ Japanese and the output is Japanese; in English and it is English.
 path from the repository root, so it has to be run inside one — nothing else on
 this list applies to it.
 
-`/forge:review-pr` needs the `gh` CLI installed and authenticated with read
-access to the repository; building a verification environment additionally
+`/forge:review-pr` has to be run inside a local clone of the PR's repository
+(a fork works if one of its remotes points at that repository), and needs
+the `gh` CLI installed and authenticated with read access to the
+repository; building a verification environment additionally
 needs whatever the repository's own setup docs require.
 
 `/forge:finalize` and `/forge:watch` additionally need:
@@ -284,8 +287,9 @@ CI ログ・Issue の照会、1 回の確認のあとにローカル環境での
 実行します。出力は 2 つの Markdown ファイルです。1 つは **レビュアーがやること
 の一覧（これで全部）** を冒頭に置き（判断・期待結果つきの手順・AI の根拠の抜き
 取り確認）、チェックリスト全体を付録にしたもの、もう 1 つは提出用のレビュー文
-の下書きです。GitHub への投稿と結論の判断はしません。提出前には head のコミット
-を確認し直します。環境を作らない場合は `--no-env` を付けます。
+の下書きです。頼まれない限り GitHub には投稿せず、結論の判断はしません。提出
+前には head のコミットを確認し直します。環境を作ると PR のコードを手元で実行
+するため、先に確認を取ります。環境を作らない場合は `--no-env` を付けます。
 
 ```bash
 /forge:review-pr https://github.com/OWNER/REPO/pull/123
@@ -320,7 +324,9 @@ CI ログ・Issue の照会、1 回の確認のあとにローカル環境での
 リポジトリルート基準で解決するため、リポジトリ内で実行してください。以下の
 項目はいずれもこのコマンドには不要です。
 
-`/forge:review-pr` には、リポジトリを読める権限で認証済みの `gh` CLI が必要
+`/forge:review-pr` は、PR のリポジトリをクローンした手元のリポジトリの中で実行
+してください（fork でも、そのリポジトリを指すリモートがあれば使えます）。また、
+リポジトリを読める権限で認証済みの `gh` CLI が必要
 です。確認用の環境を作る場合は、そのリポジトリのセットアップ手順が求めるものも
 必要です。
 
@@ -436,8 +442,9 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 然后执行 AI 能够验证的一切——代码、测试、CI 日志、Issue 查询，以及在一次确认后
 于本地环境中运行 E2E 和浏览器检查。输出为两个 Markdown 文件：一个以 **评审者的
 完整待办清单**（决策、附预期结果的操作步骤、对 AI 证据的抽查）开头、并将完整
-检查清单作为附录；另一个是用于提交的评审草稿。它不会向 GitHub 发布内容，也不替
-你做结论；提交前会重新确认 head 提交。若不搭建环境，请加上 `--no-env`。
+检查清单作为附录；另一个是用于提交的评审草稿。除非你要求，它不会向 GitHub 发布
+内容，也不替你做结论；提交前会重新确认 head 提交。搭建环境会在本机运行 PR 的
+代码，因此会先征求确认；若不搭建环境，请加上 `--no-env`。
 
 ```bash
 /forge:review-pr https://github.com/OWNER/REPO/pull/123
@@ -468,7 +475,8 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 `/forge:review-design` 只需要一件事：一个 **git 仓库**。它从仓库根目录解析
 所有路径，因此必须在仓库内运行；下面列出的其余项均与它无关。
 
-`/forge:review-pr` 需要已安装并以具备仓库读取权限的账号认证的 `gh` CLI；如需
+`/forge:review-pr` 必须在 PR 所属仓库的本地克隆中运行（fork 也可以，只要有一个
+remote 指向该仓库），并需要已安装并以具备仓库读取权限的账号认证的 `gh` CLI；如需
 搭建验证环境，还需要该仓库自身搭建文档所要求的一切。
 
 `/forge:finalize` 与 `/forge:watch` 则额外需要：
