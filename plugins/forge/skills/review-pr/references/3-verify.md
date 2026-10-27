@@ -28,8 +28,9 @@ user a short plan and ask once (AskUserQuestion when available):
   worktrees' environments, anything remote);
 - anything that needs the user (admin rights, a secret, an installed tool).
 
-After a "yes", do not ask again until the report, except for something the
-plan did not cover. On "no", on `--no-env`, or when no question tool is
+The "yes" covers the head SHA the plan named and nothing else. After it, do
+not ask again until the report, except for something the plan did not
+cover; a new head (Step 5) needs a new "yes". On "no", on `--no-env`, or when no question tool is
 available, skip environment work and mark those checks "pending (no
 environment)".
 
