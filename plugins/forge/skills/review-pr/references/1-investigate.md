@@ -19,8 +19,8 @@ first-pass reviewers already said — before forming any opinion.
   case-insensitively, ignoring the URL form (`git@host:owner/repo.git`,
   `https://host/owner/repo`) and a trailing `.git`. It is not necessarily
   `origin` — in a fork checkout `origin` is the fork, and a URL may name a
-  different repository altogether. If no remote matches, stop and tell the user to run
-  the skill inside a clone of `<owner/repo>`; never fetch `pull/<n>/head`
+  different repository altogether. If no remote matches, stop and tell the
+  user to run the skill inside a clone of `<owner/repo>`; never fetch `pull/<n>/head`
   from another repository, which would review a different PR under this
   one's number.
 - Fetch the head and the base without touching the user's branches:

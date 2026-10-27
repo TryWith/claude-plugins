@@ -83,7 +83,8 @@
       "git  worktree   add ../wt",
       "git -C /repo worktree add ../wt pr/42",
       "git -C \"/Users/me/My Repo\" worktree add ../wt",
-      "git --git-dir=/r/.git worktree add ../wt"
+      "git --git-dir=/r/.git worktree add ../wt",
+      "{\"command\":\"git -C \\\"/Users/me/My Repo\\\" worktree add ../wt\"}"
     ],
     "no_match": [
       "git worktree list",

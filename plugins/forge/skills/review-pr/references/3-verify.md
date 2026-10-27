@@ -45,8 +45,8 @@ plus the PR's changes to them; do not invent one, and do not run a PR
 setup change the plan did not show. Typically: a detached worktree at the
 head SHA, isolated names/ports/hosts as the docs describe, dependencies,
 database migrate/seed or rebuild (including one-time rebuild notes the PR
-adds), and any test tenant/account. Record every resource you create so Step 4 can list
-how to remove it. If a step needs admin rights (for example editing
+adds), and any test tenant/account. Record every resource you create so
+Step 4 can list how to remove it. If a step needs admin rights (for example editing
 `/etc/hosts`) or a newer toolchain than the machine has, stop that check,
 give the user the exact command, and continue with the rest.
 
