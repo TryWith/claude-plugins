@@ -26,8 +26,9 @@ the last run — the author's replies may close questions.
 
 Fetch again with the Step 1.1 command — its `+` lets a force-pushed head
 replace the old `pr/<n>` — and confirm `pr/<n>` is the new head SHA before
-anything else. Move the verification worktree to the new head, follow any rebuild notes
-the delta adds, re-run E2E and the affected checks, and update the Status
+anything else. Move the verification worktree to the new head, follow any
+rebuild notes the delta adds (show them to the user first, as in Step
+3.1), re-run E2E and the affected checks, and update the Status
 column with the new SHA prefix. Keep earlier human results but mark which
 SHA they were done at; ask the human to redo a hands-on check only when
 the delta touches it.

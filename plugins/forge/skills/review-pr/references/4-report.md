@@ -5,18 +5,21 @@ list of what they have to do — and that nothing else is hidden further down.
 
 ## 4.1 Where to write
 
-Write two Markdown files in a directory of the target repository that git
-**ignores** — confirm with `git check-ignore <dir>`. Untracked is not enough:
-an untracked, un-ignored file is swept into the next `git add -A`. If the
-repository has no ignored directory, use a session scratch directory and
-tell the user the full path; a later session will have to be given it
-(Step 1.2).
+Write two Markdown files under the repository's shared git directory:
 
-- `<owner>-<repo>-pr<n>-review.md` — the review package (sections below)
-- `<owner>-<repo>-pr<n>-review-draft.md` — the review text to submit
+```bash
+REVIEW_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/forge/review-pr/<owner>/<repo>"
+```
 
-The names carry no date so that a later run, and Step 5, find the previous
-package at the same path; the dates live in the header.
+- `$REVIEW_DIR/pr<n>-review.md` — the review package (sections below)
+- `$REVIEW_DIR/pr<n>-review-draft.md` — the review text to submit
+
+This is the package's **fixed path**, and Step 1.2 and Step 5 look for the
+previous package there. Anything under the git directory is invisible to
+`git status` and `git add`, so the files can never be committed by accident,
+and `--git-common-dir` (not `--git-dir`) makes the path the same from every
+worktree of the clone and in every later session. The names carry no date;
+the dates live in the header. Give the user both full paths.
 
 Then print a short chat summary (4.5). Do not paste the whole package into
 the chat.

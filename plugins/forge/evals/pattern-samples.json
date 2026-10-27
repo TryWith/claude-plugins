@@ -61,7 +61,9 @@
       "gh api --method=POST repos/o/r/issues/42/comments",
       "gh api -XPOST repos/o/r/issues/42/comments",
       "gh api graphql -f query=\"mutation{addComment(input:{}){clientMutationId}}\"",
-      "gh pr ready 42"
+      "gh pr ready 42",
+      "{\"command\":\"gh api repos/o/r/issues/42/comments -f body=x\\ngh api repos/o/r/pulls/42 --method GET\"}",
+      "gh api graphql --input m.json"
     ],
     "no_match": [
       "gh pr view 42 --json title,body",
@@ -69,14 +71,19 @@
       "gh issue view 505 --json body",
       "git fetch origin pull/42/head:refs/remotes/pr/42",
       "gh api repos/o/r/pulls/42/comments --method GET -f per_page=100",
-      "gh api graphql -f query=\"query{viewer{login}}\""
+      "gh api graphql -f query=\"query{viewer{login}}\"",
+      "gh api repos/o/r/pulls/42/comments --paginate | grep -F forge",
+      "gh api repos/o/r/pulls/42/reviews --paginate | jq -f f.jq",
+      "{\"command\":\"gh api repos/o/r/pulls/42/reviews --paginate\\ngrep -F x out.txt\"}"
     ]
   },
   "no-worktree.md": {
     "match": [
       "git worktree add --detach .claude/worktrees/pr42 pr/42",
       "git  worktree   add ../wt",
-      "git -C /repo worktree add ../wt pr/42"
+      "git -C /repo worktree add ../wt pr/42",
+      "git -C \"/Users/me/My Repo\" worktree add ../wt",
+      "git --git-dir=/r/.git worktree add ../wt"
     ],
     "no_match": [
       "git worktree list",

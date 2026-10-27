@@ -13,10 +13,17 @@ user a short plan and ask once (AskUserQuestion when available):
 - what will be run (unit tests, E2E, browser checks, API calls) and roughly
   how long it takes — and, said plainly, that this **executes the PR
   author's code** (tests, build scripts, dependency install hooks) on the
-  user's machine with the user's credentials. Name the author and say
-  whether the head comes from a fork (`isCrossRepository`,
-  `headRepositoryOwner` from Step 1.1); for a fork or an author outside the
-  organisation, recommend `--no-env` or a disposable machine;
+  user's machine with the user's credentials. Name the author, their
+  `author_association`, and whether the head comes from a fork
+  (`isCrossRepository`, `headRepositoryOwner`), all from Step 1.1; for a
+  fork, or an association other than `OWNER`, `MEMBER` or `COLLABORATOR`,
+  recommend `--no-env` or a disposable machine;
+- which setup procedure will be followed: the base branch's setup docs,
+  plus — shown as a diff, because they come from the PR — any changes the
+  PR makes to those docs or to the scripts they run (new env vars,
+  migrations, one-time rebuild notes). The worktree runs the PR's code, so
+  the PR's own setup changes are usually needed; the user's "yes" covers
+  them only because they were shown;
 - what it will **not** touch (the user's checkout and branches, other
   worktrees' environments, anything remote);
 - anything that needs the user (admin rights, a secret, an installed tool).
@@ -33,12 +40,12 @@ dependencies, so it is environment work.
 
 ## 3.2 Environment
 
-Follow the repository's own setup documentation from Step 1.2 (the base
-branch's version); do not invent a procedure. If the PR changes the setup
-docs or the scripts they run, say so in the 3.1 plan before running them. Typically: a detached worktree at the head SHA, isolated
-names/ports/hosts as the docs describe, dependencies, database migrate/seed
-or rebuild (read the docs for one-time rebuild notes the PR adds), and any
-test tenant/account. Record every resource you create so Step 4 can list
+Follow the procedure the 3.1 plan showed — the base branch's setup docs
+plus the PR's changes to them; do not invent one, and do not run a PR
+setup change the plan did not show. Typically: a detached worktree at the
+head SHA, isolated names/ports/hosts as the docs describe, dependencies,
+database migrate/seed or rebuild (including one-time rebuild notes the PR
+adds), and any test tenant/account. Record every resource you create so Step 4 can list
 how to remove it. If a step needs admin rights (for example editing
 `/etc/hosts`) or a newer toolchain than the machine has, stop that check,
 give the user the exact command, and continue with the rest.

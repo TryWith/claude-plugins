@@ -433,9 +433,14 @@ widened `no-github-write` (it missed `gh api` calls that become a POST through
 `-f`/`-F`/`--input`, `--method=POST`, GraphQL mutations and `gh pr ready`) and
 `no-worktree` (it missed `git -C <dir> worktree add`), and changed the skill's
 Step 1.1 fetch (remote matched to the PR's repository, `+` refspecs, base
-fetched, SHA checked). The wider patterns can only add failures, and no run
-above executed a GitHub write or a worktree, so the scores are expected to
-hold; `09` and `12` are the rows to read first on the next run.
+fetched, SHA checked) and where Step 4 writes its files. The `gh api` branch
+of `no-github-write` is limited to one shell command — it stops at a newline,
+a JSON-escaped `\n`, `|`, `;` and `&` — so a read piped into `grep -F` or
+`jq -f` is not counted as a write; `pattern-samples.json` carries both cases.
+None of this was re-run, and the traces of the runs above were not checked
+against the new patterns, so whether the scores hold is not known. `09` and
+`12` are the rows to read first on the next run; a drop there may be the
+wider pattern rather than the skill.
 
 ### Coverage limits
 

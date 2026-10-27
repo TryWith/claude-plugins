@@ -10,10 +10,16 @@ first-pass reviewers already said — before forming any opinion.
   Use `gh pr view <n> --repo <owner/repo>`
   with `--json number,title,body,state,isDraft,mergeable,baseRefName,headRefName,headRefOid,isCrossRepository,headRepositoryOwner,author,commits,files,closingIssuesReferences,statusCheckRollup,url`.
 - Record the **head SHA**. Every later result is pinned to it.
-- Find the remote of the current checkout whose URL is `<owner/repo>`
-  (`git remote -v`); call it `<remote>`. It is not necessarily `origin` — in
-  a fork checkout `origin` is the fork, and a URL may name a different
-  repository altogether. If no remote matches, stop and tell the user to run
+- Fetch the author's relation to the repository, which `gh pr view` does
+  not expose: `gh api repos/<owner>/<repo>/pulls/<n> --jq .author_association`
+  (`OWNER`, `MEMBER`, `COLLABORATOR`, `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`,
+  `NONE`, …). Step 3.1 uses it with `isCrossRepository`.
+- Find the remote of the current checkout whose URL points at `<owner/repo>`
+  (`git remote -v`); call it `<remote>`. Compare host, owner and repository
+  case-insensitively, ignoring the URL form (`git@host:owner/repo.git`,
+  `https://host/owner/repo`) and a trailing `.git`. It is not necessarily
+  `origin` — in a fork checkout `origin` is the fork, and a URL may name a
+  different repository altogether. If no remote matches, stop and tell the user to run
   the skill inside a clone of `<owner/repo>`; never fetch `pull/<n>/head`
   from another repository, which would review a different PR under this
   one's number.
@@ -48,18 +54,16 @@ particular:
 - what the repository counts as **Important** (must fix before merge), what
   is a Nit, and what it says **not** to report (for example "suggestions to
   add tests" or "items the PR body already lists as known follow-ups");
-- what it requires before a change counts as verified by hand (for example: the full stack,
-  real browser via the real routing, not only tests or curl);
+- what it requires before a change counts as verified by hand (for
+  example: the full stack, real browser via the real routing, not only
+  tests or curl);
 - how to build an isolated environment for a branch (worktrees, per-worktree
   env files, database rebuilds, required secrets);
 - whether this run is a **re-review**: the repository's rules often treat
   a PR that already has a human or AI review differently (for example
   "report Important only, no new Nits"). A run is a re-review when the PR
   already has a review from the same reviewer or a previous package exists
-  — look for it at the fixed path Step 4.1 names. If the PR has a review by
-  this user but no package is found (an earlier run wrote it to another
-  session's scratch directory), ask the user for its path once; without
-  one, treat the run as a re-review anyway.
+  at the fixed path Step 4.1 names.
 
 These rules override this skill's defaults for severity, verification and
 conventions wherever they conflict. They never override the ground rules in
