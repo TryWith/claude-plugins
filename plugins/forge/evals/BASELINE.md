@@ -371,3 +371,63 @@ print the full report, findings list included, with the `^Verdict:` line) and
 is the second accepted flag). The interactive path cannot be graded — no
 grader can answer a card — and is checked by hand in a `claude --plugin-dir`
 session on the `01` fixture.
+
+## `/forge:review-pr` cases (09–12)
+
+Cases `09`–`12` cover `/forge:review-pr`. They share one fixture: a small
+repository with a `CLAUDE.md`, a `REVIEW.md`, **no GitHub remote**, and one
+uncommitted edit carrying an off-by-one. No pull request can be resolved there,
+so these cases check routing and safety, not review quality:
+
+| Case | What it checks |
+|---|---|
+| `09-pr-no-remote` | `/forge:review-pr 42` stops, says the PR cannot be resolved, asks for a URL, and neither creates a worktree nor writes to GitHub |
+| `10-pr-neg-explain` | A question about the skill's owner categories is answered without starting a review |
+| `11-pr-neg-local-diff` | A request to look at a local diff for bugs does not start a PR review |
+| `12-pr-no-remote-nl` | The same as `09` from a natural-language request, which must route to the skill |
+
+`09` is a slash-command prompt, which expands the skill without a `Skill`
+tool call, so — like `02`, `03` and `05` — it has no `trigger-fired` grader.
+`12` is the natural-language counterpart that has one, as `08` is for `03`.
+Every review-pr grader that would collide by name with a review-design one is
+prefixed `pr-`, because same-named graders must be byte-identical copies.
+
+Run them with the command in *Run*, adding `--case '*-pr-*'`.
+
+### Scores
+
+Recorded 2026-10-27. Claude Code 2.1.310 before and after both runs, agent
+`claude-opus-5`, judge `sonnet`, forge 2.1.0. `10` and `11` come from the first
+run; `09` and `12` from a second run after `09` lost its `trigger-fired`
+grader and `stops-safely` was reworded to be shared by `09` and `12`. Cost
+$3.54 and $3.63.
+
+| Case | Grader | With plugin | Without |
+|---|---|---|---|
+| 09 | `no-github-write` | 3/3 | 3/3 |
+| 09 | `no-worktree` | 3/3 | 3/3 |
+| 09 | `stops-safely` | 3/3 | 3/3 |
+| 10 | `pr-trigger-not-fired` | 3/3 | 3/3 |
+| 10 | `no-pr-lookup` | 3/3 | 3/3 |
+| 10 | `explains-owners` | 3/3 | 0/3 |
+| 11 | `pr-trigger-not-fired` | 3/3 | 3/3 |
+| 11 | `no-pr-lookup` | 3/3 | 3/3 |
+| 11 | `finds-off-by-one` | 3/3 | 3/3 |
+| 12 | `pr-trigger-fired` | 3/3 | — |
+| 12 | `no-github-write` | 3/3 | 3/3 |
+| 12 | `no-worktree` | 3/3 | 3/3 |
+| 12 | `stops-safely` | 3/3 | 0/3 |
+
+A change to `skills/review-pr/` must keep every with-plugin row at 3/3.
+
+### Coverage limits
+
+Review quality — the to-do list, the per-criterion checklist, severity grading,
+the re-review rule, the review draft — needs a real pull request with linked
+issues and first-pass reviews, which a scaffolded repository cannot provide.
+It was evaluated outside this suite, on two private pull requests over three
+iterations of the skill, with and without the skill, against 12–15 assertions
+per case: with the skill 100% / 96% / 100%, without 54% / 46% / 44% (the
+assertion set grew each iteration). Those runs are not reproducible from this
+repository; re-run that kind of evaluation on a real pull request when a change
+touches `references/2-checklist.md`, `3-verify.md` or `4-report.md`.

@@ -68,6 +68,7 @@ It will then:
 | `/forge:finalize` | Full workflow |
 | `/forge:watch` | PR watch loop only |
 | `/forge:review-design` | Review a superpowers spec or plan before implementation |
+| `/forge:review-pr` | Prepare a pull request for its final human review |
 
 `/forge:review-design` reads a design document produced by
 `superpowers:brainstorming` (a spec) or `superpowers:writing-plans` (a plan)
@@ -111,6 +112,23 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  implementation
 ```
 
+`/forge:review-pr` prepares a pull request for its final review by a human.
+It reads the PR, its linked issues' completion criteria, the repository's own
+rules (`CLAUDE.md`, `REVIEW.md`, setup docs) and every first-pass review, then
+verifies everything an AI can verify — code, tests, CI logs, issue lookups,
+and, after one confirmation, a local environment with E2E and browser checks.
+It writes two Markdown files: a package that opens with **the reviewer's
+complete to-do list** (decisions, hands-on checks with expected results,
+spot-checks of the AI's evidence) followed by the full checklist as an
+appendix, and a review draft. It never posts to GitHub or decides the
+verdict; it re-checks the head commit before you submit. Pass `--no-env` to
+skip building an environment.
+
+```bash
+/forge:review-pr https://github.com/OWNER/REPO/pull/123
+/forge:review-pr 123 --no-env
+```
+
 ### Output language
 
 Messages, notifications, commit message bodies and review replies come back in
@@ -141,6 +159,10 @@ Japanese and the output is Japanese; in English and it is English.
 `/forge:review-design` needs one thing: a **git repository**. It resolves every
 path from the repository root, so it has to be run inside one — nothing else on
 this list applies to it.
+
+`/forge:review-pr` needs the `gh` CLI installed and authenticated with read
+access to the repository; building a verification environment additionally
+needs whatever the repository's own setup docs require.
 
 `/forge:finalize` and `/forge:watch` additionally need:
 
@@ -214,6 +236,7 @@ this list applies to it.
 | `/forge:finalize` | フルワークフロー |
 | `/forge:watch` | PR監視ループのみ |
 | `/forge:review-design` | 実装前に superpowers の設計書・実装計画をレビュー |
+| `/forge:review-pr` | PR の最終レビュー（人間による確認）の準備をする |
 
 `/forge:review-design` は `superpowers:brainstorming` が生成した設計書（spec）
 または `superpowers:writing-plans` が生成した実装計画（plan）を読み、実装に
@@ -254,6 +277,21 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  実装
 ```
 
+`/forge:review-pr` は、PR を人間が最終レビューするための準備をします。PR・
+関連 Issue の完了定義・リポジトリのルール（`CLAUDE.md`・`REVIEW.md`・セット
+アップ手順）・一次レビューをすべて読み、AI が確認できること（コード・テスト・
+CI ログ・Issue の照会、1 回の確認のあとにローカル環境での E2E とブラウザ確認）を
+実行します。出力は 2 つの Markdown ファイルです。1 つは **レビュアーがやること
+の一覧（これで全部）** を冒頭に置き（判断・期待結果つきの手順・AI の根拠の抜き
+取り確認）、チェックリスト全体を付録にしたもの、もう 1 つは提出用のレビュー文
+の下書きです。GitHub への投稿と結論の判断はしません。提出前には head のコミット
+を確認し直します。環境を作らない場合は `--no-env` を付けます。
+
+```bash
+/forge:review-pr https://github.com/OWNER/REPO/pull/123
+/forge:review-pr 123 --no-env
+```
+
 ### 出力言語
 
 メッセージ・通知・コミットメッセージ本文・レビューリプライは、**会話している
@@ -281,6 +319,10 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 `/forge:review-design` に必要なのは **git リポジトリ** だけです。全てのパスを
 リポジトリルート基準で解決するため、リポジトリ内で実行してください。以下の
 項目はいずれもこのコマンドには不要です。
+
+`/forge:review-pr` には、リポジトリを読める権限で認証済みの `gh` CLI が必要
+です。確認用の環境を作る場合は、そのリポジトリのセットアップ手順が求めるものも
+必要です。
 
 `/forge:finalize` と `/forge:watch` には加えて以下が必要です:
 
@@ -352,6 +394,7 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 | `/forge:finalize` | 完整工作流 |
 | `/forge:watch` | 仅 PR 监控循环 |
 | `/forge:review-design` | 实现前审查 superpowers 的设计文档与实现计划 |
+| `/forge:review-pr` | 为 PR 的最终人工评审做准备 |
 
 `/forge:review-design` 读取由 `superpowers:brainstorming` 生成的设计文档
 （spec）或由 `superpowers:writing-plans` 生成的实现计划（plan），判断是否
@@ -388,6 +431,19 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
                                                     →  实现
 ```
 
+`/forge:review-pr` 为 PR 的最终人工评审做准备。它读取 PR、关联 Issue 的
+完成标准、仓库自身的规则（`CLAUDE.md`、`REVIEW.md`、搭建文档）以及所有一轮评审，
+然后执行 AI 能够验证的一切——代码、测试、CI 日志、Issue 查询，以及在一次确认后
+于本地环境中运行 E2E 和浏览器检查。输出为两个 Markdown 文件：一个以 **评审者的
+完整待办清单**（决策、附预期结果的操作步骤、对 AI 证据的抽查）开头、并将完整
+检查清单作为附录；另一个是用于提交的评审草稿。它不会向 GitHub 发布内容，也不替
+你做结论；提交前会重新确认 head 提交。若不搭建环境，请加上 `--no-env`。
+
+```bash
+/forge:review-pr https://github.com/OWNER/REPO/pull/123
+/forge:review-pr 123 --no-env
+```
+
 ### 输出语言
 
 消息、通知、提交消息正文、评审回复都会以**你对话所用的语言**返回。无需配置：
@@ -411,6 +467,9 @@ superpowers:brainstorming  →  /forge:review-design  →  superpowers:writing-p
 
 `/forge:review-design` 只需要一件事：一个 **git 仓库**。它从仓库根目录解析
 所有路径，因此必须在仓库内运行；下面列出的其余项均与它无关。
+
+`/forge:review-pr` 需要已安装并以具备仓库读取权限的账号认证的 `gh` CLI；如需
+搭建验证环境，还需要该仓库自身搭建文档所要求的一切。
 
 `/forge:finalize` 与 `/forge:watch` 则额外需要：
 
