@@ -20,9 +20,9 @@ first-pass reviewers already said — before forming any opinion.
   `https://host/owner/repo`) and a trailing `.git`. It is not necessarily
   `origin` — in a fork checkout `origin` is the fork, and a URL may name a
   different repository altogether. If no remote matches, stop and tell the
-  user to run the skill inside a clone of `<owner/repo>`; never fetch `pull/<n>/head`
-  from another repository, which would review a different PR under this
-  one's number.
+  user to run the skill inside a clone of `<owner/repo>`; never fetch
+  `pull/<n>/head` from another repository, which would review a different
+  PR under this one's number.
 - Fetch the head and the base without touching the user's branches:
   `git fetch <remote> +refs/pull/<n>/head:refs/remotes/pr/<n> +refs/heads/<base>:refs/remotes/<remote>/<base>`.
   The leading `+` matters: on a re-review after a force-push, a fetch
