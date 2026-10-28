@@ -11,7 +11,7 @@ Write two Markdown files under the repository's shared git directory:
 REVIEW_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/forge/review-pr/<owner>/<repo>"
 ```
 
-Take `<owner>/<repo>` from the `url` that `gh pr view` returned in Step 1.1,
+Take `<owner>/<repo>` from the PR's `url` field fetched in Step 1.1,
 lower-cased — not from what the user typed — so every run spells the same
 directory.
 

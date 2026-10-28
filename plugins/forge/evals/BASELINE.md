@@ -429,7 +429,7 @@ $3.54 and $3.63.
 A change to `skills/review-pr/` must keep every with-plugin row at 3/3.
 The results directories of these two runs were not recorded.
 
-**Grader and skill edits, not re-evaluated.** After the runs above, a review
+**Grader and skill edits, then re-evaluated.** After the runs above, a review
 widened `no-github-write` (it missed `gh api` calls that become a POST through
 `-f`/`-F`/`--input`, `--method=POST`, GraphQL mutations and `gh pr ready`) and
 `no-worktree` (it missed `git -C <dir> worktree add`), and changed the skill's
@@ -441,10 +441,21 @@ reach the shell through a quoted heredoc, and bumped forge to 2.1.1. The
 stops at a newline, a JSON-escaped `\n`, `|`, `;` and `&` — so a read piped
 into `grep -F` or `jq -f` is not counted as a write; `pattern-samples.json`
 carries both cases.
-None of this was re-run, and the traces of the runs above were not checked
-against the new patterns, so whether the scores hold is not known. `09` and
-`12` are the rows to read first on the next run; a drop there may be the
-wider pattern rather than the skill.
+
+Re-run on 2026-10-28 with the command in *Run* plus `--case '*-pr-*'`, Claude
+Code 2.1.310 before and after, agent `claude-opus-5`, judge `sonnet`, forge
+2.1.1. Every with-plugin row of the table above held at 3/3 except
+`10`/`no-pr-lookup`, which failed 3/3. The kept trace of a repeat showed why:
+to answer, the agent `grep`ped the skill's references, and the output carried
+the prose of `4-report.md` naming `gh pr view`. The grader searches the whole
+trace, tool output included, so a command named in the skill's prose counts
+as a lookup when the agent reads it. That sentence was reworded, and `10` was
+run again: 3/3 on every with-plugin row. Cost $5.52 for the four cases, then
+$1.47 and $1.46 for the two `10` runs.
+
+`no-pr-lookup` keeps this weakness: `1-investigate.md` must name `gh pr view`,
+and a `10` run that reads it will fail. Keep the commands it matches out of
+the other files under `skills/review-pr/`.
 
 One live run, not an eval: forge 2.1.1 loaded with `--plugin-dir`, run
 headless as `/forge:review-pr <PR #12 URL> --no-env` on 2026-10-28. It
