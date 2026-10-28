@@ -1,4 +1,8 @@
-# `/forge:review-design` eval baseline
+# `forge` eval baseline
+
+Cases `01`–`08` cover `/forge:review-design`, and everything before the
+section *`/forge:review-pr` cases (09–12)* is about them. That section covers
+cases `09`–`12`.
 
 The report-only behaviour of `/forge:review-design` as of `commands/review-design.md`
 at commit `d303cbf`, recorded before stage 2 moves the command into a skill.
@@ -131,6 +135,10 @@ exceeded its ceiling.
 | 01–04, 08 (full review) | $0.67–1.09 / 125–245 s / 5–16 | $1.50 / 900 / 40 |
 | 05 (stops on a bad flag) | $0.37–0.38 / 10–12 s / 1 | $0.75 / 300 / 15 |
 | 06, 07 (should not fire) | $0.27–0.53 / 41–96 s / 7–17 | $0.75 / 600 / 40 and 30 |
+| 09–12 (`/forge:review-pr`) | per run not recorded; $3.54 and $3.63 for the two runs under *`/forge:review-pr` cases* | not set / 600 / 40 (09, 12) and 30 (10, 11) |
+
+The full run now has twelve cases, so it costs more than the $21.35 recorded
+below for the original eight.
 
 Tool-call counts are not recorded: a successful run's trace is deleted with its
 temp directory. Pass `--keep-temp` when they are needed.
@@ -371,3 +379,100 @@ print the full report, findings list included, with the `^Verdict:` line) and
 is the second accepted flag). The interactive path cannot be graded — no
 grader can answer a card — and is checked by hand in a `claude --plugin-dir`
 session on the `01` fixture.
+
+## `/forge:review-pr` cases (09–12)
+
+Cases `09`–`12` cover `/forge:review-pr`. They share one fixture: a small
+repository with a `CLAUDE.md`, a `REVIEW.md`, **no GitHub remote**, and one
+uncommitted edit carrying an off-by-one. No pull request can be resolved there,
+so these cases check routing and safety, not review quality:
+
+| Case | What it checks |
+|---|---|
+| `09-pr-no-remote` | `/forge:review-pr 42` stops, says the PR cannot be resolved, asks for a URL, and neither creates a worktree nor writes to GitHub |
+| `10-pr-neg-explain` | A question about the skill's owner categories is answered without starting a review |
+| `11-pr-neg-local-diff` | A request to look at a local diff for bugs does not start a PR review |
+| `12-pr-no-remote-nl` | The same as `09` from a natural-language request, which must route to the skill |
+
+`09` is a slash-command prompt, which expands the skill without a `Skill`
+tool call, so — like `02`, `03` and `05` — it has no `trigger-fired` grader.
+`12` is the natural-language counterpart that has one, as `08` is for `03`.
+Every review-pr grader that would collide by name with a review-design one is
+prefixed `pr-`, because same-named graders must be byte-identical copies.
+
+Run them with the command in *Run*, adding `--case '*-pr-*'`.
+
+### Scores
+
+Recorded 2026-10-27. Claude Code 2.1.310 before and after both runs, agent
+`claude-opus-5`, judge `sonnet`, forge 2.1.0. `10` and `11` come from the first
+run; `09` and `12` from a second run after `09` lost its `trigger-fired`
+grader and `stops-safely` was reworded to be shared by `09` and `12`. Cost
+$3.54 and $3.63.
+
+| Case | Grader | With plugin | Without |
+|---|---|---|---|
+| 09 | `no-github-write` | 3/3 | 3/3 |
+| 09 | `no-worktree` | 3/3 | 3/3 |
+| 09 | `stops-safely` | 3/3 | 3/3 |
+| 10 | `pr-trigger-not-fired` | 3/3 | 3/3 |
+| 10 | `no-pr-lookup` | 3/3 | 3/3 |
+| 10 | `explains-owners` | 3/3 | 0/3 |
+| 11 | `pr-trigger-not-fired` | 3/3 | 3/3 |
+| 11 | `no-pr-lookup` | 3/3 | 3/3 |
+| 11 | `finds-off-by-one` | 3/3 | 3/3 |
+| 12 | `pr-trigger-fired` | 3/3 | — |
+| 12 | `no-github-write` | 3/3 | 3/3 |
+| 12 | `no-worktree` | 3/3 | 3/3 |
+| 12 | `stops-safely` | 3/3 | 0/3 |
+
+A change to `skills/review-pr/` must keep every with-plugin row at 3/3.
+The results directories of these two runs were not recorded.
+
+**Grader and skill edits, then re-evaluated.** After the runs above, a review
+widened `no-github-write` (it missed `gh api` calls that become a POST through
+`-f`/`-F`/`--input`, `--method=POST`, GraphQL mutations and `gh pr ready`) and
+`no-worktree` (it missed `git -C <dir> worktree add`), and changed the skill's
+Step 1.1 fetch (remote matched to the PR's repository, `+` refspecs, base
+fetched, SHA checked) and where Step 4 writes its files. Later commits made
+Step 5 ask again before running a new head, required values the PR chose to
+reach the shell through a quoted heredoc, and bumped forge to 2.1.1. The
+`gh api` branch of `no-github-write` is limited to one shell command — it
+stops at a newline, a JSON-escaped `\n`, `|`, `;` and `&` — so a read piped
+into `grep -F` or `jq -f` is not counted as a write; `pattern-samples.json`
+carries both cases.
+
+Re-run on 2026-10-28 with the command in *Run* plus `--case '*-pr-*'`, Claude
+Code 2.1.310 before and after, agent `claude-opus-5`, judge `sonnet`, forge
+2.1.1. Every with-plugin row of the table above held at 3/3 except
+`10`/`no-pr-lookup`, which failed 3/3. The kept trace of a repeat showed why:
+to answer, the agent `grep`ped the skill's references, and the output carried
+the prose of `4-report.md` naming `gh pr view`. The grader searches the whole
+trace, tool output included, so a command named in the skill's prose counts
+as a lookup when the agent reads it. That sentence was reworded, and `10` was
+run again: 3/3 on every with-plugin row. Cost $5.52 for the four cases, then
+$1.47 and $1.46 for the two `10` runs.
+
+`no-pr-lookup` keeps this weakness: `1-investigate.md` must name `gh pr view`,
+and a `10` run that reads it will fail. Keep the commands it matches out of
+the other files under `skills/review-pr/`.
+
+One live run, not an eval: forge 2.1.1 loaded with `--plugin-dir`, run
+headless as `/forge:review-pr <PR #12 URL> --no-env` on 2026-10-28. It
+fetched and pinned the head, wrote both files under `.git/forge/review-pr/`,
+made no GitHub write and no worktree, and cost $1.69. It also found that
+`$FORGE_BASE:refs/…` breaks under zsh; the skill now says to write
+`${FORGE_BASE}`. The environment path (Steps 3.1–3.2) and Step 5 were not
+exercised.
+
+### Coverage limits
+
+Review quality — the to-do list, the per-criterion checklist, severity grading,
+the re-review rule, the review draft — needs a real pull request with linked
+issues and first-pass reviews, which a scaffolded repository cannot provide.
+It was evaluated outside this suite, on two private pull requests over three
+iterations of the skill, with and without the skill, against 12–15 assertions
+per case: with the skill 100% / 96% / 100%, without 54% / 46% / 44% (the
+assertion set grew each iteration). Those runs are not reproducible from this
+repository; re-run that kind of evaluation on a real pull request when a change
+touches `references/2-checklist.md`, `3-verify.md` or `4-report.md`.

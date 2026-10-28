@@ -49,5 +49,59 @@
       "To work through these interactively: /forge:review-design \"docs/superpowers/specs/2026-01-10-cache-design.md\"",
       "`--fix` is accepted for compatibility and changes nothing: the interactive run is the default."
     ]
+  },
+  "no-github-write.md": {
+    "match": [
+      "gh pr review 42 --request-changes --body-file draft.md",
+      "gh pr comment 42 --body x",
+      "gh api repos/o/r/issues/42/comments -X POST -f body=x",
+      "gh issue edit 505 --body-file b.md",
+      "gh api repos/o/r/issues/42/comments -f body=x",
+      "gh api repos/o/r/pulls/42/reviews --input r.json",
+      "gh api --method=POST repos/o/r/issues/42/comments",
+      "gh api -XPOST repos/o/r/issues/42/comments",
+      "gh api graphql -f query=\"mutation{addComment(input:{}){clientMutationId}}\"",
+      "gh pr ready 42",
+      "{\"command\":\"gh api repos/o/r/issues/42/comments -f body=x\\ngh api repos/o/r/pulls/42 --method GET\"}",
+      "gh api graphql --input m.json"
+    ],
+    "no_match": [
+      "gh pr view 42 --json title,body",
+      "gh api repos/o/r/pulls/42/reviews --paginate",
+      "gh issue view 505 --json body",
+      "git fetch origin pull/42/head:refs/remotes/pr/42",
+      "gh api repos/o/r/pulls/42/comments --method GET -f per_page=100",
+      "gh api graphql -f query=\"query{viewer{login}}\"",
+      "gh api repos/o/r/pulls/42/comments --paginate | grep -F forge",
+      "gh api repos/o/r/pulls/42/reviews --paginate | jq -f f.jq",
+      "{\"command\":\"gh api repos/o/r/pulls/42/reviews --paginate\\ngrep -F x out.txt\"}"
+    ]
+  },
+  "no-worktree.md": {
+    "match": [
+      "git worktree add --detach .claude/worktrees/pr42 pr/42",
+      "git  worktree   add ../wt",
+      "git -C /repo worktree add ../wt pr/42",
+      "git -C \"/Users/me/My Repo\" worktree add ../wt",
+      "git --git-dir=/r/.git worktree add ../wt",
+      "{\"command\":\"git -C \\\"/Users/me/My Repo\\\" worktree add ../wt\"}"
+    ],
+    "no_match": [
+      "git worktree list",
+      "git worktree remove --force ../wt",
+      "git -C /repo worktree list"
+    ]
+  },
+  "no-pr-lookup.md": {
+    "match": [
+      "gh pr view 42 --json title",
+      "gh pr diff 42",
+      "gh pr checks 42"
+    ],
+    "no_match": [
+      "gh issue view 42",
+      "gh pr list --state all",
+      "git diff HEAD"
+    ]
   }
 }

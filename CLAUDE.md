@@ -11,7 +11,7 @@ A Claude Code plugin marketplace published as `TryWith/claude-plugins`. **There 
 - `.claude-plugin/marketplace.json` — marketplace manifest (registers plugins)
 - `plugins/<name>/.claude-plugin/plugin.json` — per-plugin manifest
 - `plugins/<name>/commands/*.md` — slash command files; frontmatter `description:` exposes each one as `/<plugin>:<command>`. Each command or skill is self-contained — a skill's `references/` belong to that skill alone, and there is no shared library directory; reuse across commands happens by invoking another slash command (e.g. `/forge:finalize` invokes `/forge:watch`).
-- `plugins/<name>/skills/<skill>/SKILL.md` — a skill, invoked as `/<plugin>:<skill>` like a command. Its steps name the files under its own `references/` directory, which Claude reads only when a step reaches them. `/forge:review-design` lives here.
+- `plugins/<name>/skills/<skill>/SKILL.md` — a skill, invoked as `/<plugin>:<skill>` like a command. Its steps name the files under its own `references/` directory, which Claude reads only when a step reaches them. `/forge:review-design` and `/forge:review-pr` live here.
 
 ## Validation (there is no build)
 
@@ -35,12 +35,13 @@ grader (a `not_contains` pattern that matches nothing passes every eval run,
 broken or not), the only one that catches a grader field `claude plugin eval`
 would refuse the whole case over, and the only one that catches a shared
 `fixture.sh` or grader copy that has drifted from its siblings. A full eval run
-costs about $20 and nobody runs one for a one-line grader edit; this is what
+costs well over $20 and nobody runs one for a one-line grader edit; this is what
 stands in for it.
 
 ### Evals
 
-`plugins/forge/evals/` is a `claude plugin eval` suite for `/forge:review-design`.
+`plugins/forge/evals/` is a `claude plugin eval` suite for `/forge:review-design`
+(cases `01`–`08`) and `/forge:review-pr` (cases `09`–`12`).
 How to run it, what it costs, and what a change must keep passing are in
 `plugins/forge/evals/BASELINE.md` — follow its *Run* section, not a copy of it.
 
