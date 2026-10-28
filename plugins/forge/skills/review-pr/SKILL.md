@@ -53,6 +53,10 @@ prevent one of those.
   git check-ref-format --branch "$FORGE_BASE" >/dev/null || exit 1
   ```
 
+  Write the variable with braces, `${FORGE_BASE}`, wherever text follows
+  it: zsh reads `$FORGE_BASE:r…` as the `:r` modifier, so
+  `"+refs/heads/$FORGE_BASE:refs/…"` becomes `+refs/heads/mainefs/…` and
+  the fetch fails.
   Never paste the value into the command text: double quotes do not stop
   `$(...)`, backticks or `${...}`, and a `"` in the value ends the string.
   The binding is what makes the value safe; `git check-ref-format` only

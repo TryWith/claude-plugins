@@ -26,8 +26,9 @@ first-pass reviewers already said — before forming any opinion.
 - Fetch the head and the base without touching the user's branches:
   `git fetch <remote> +refs/pull/<n>/head:refs/remotes/pr/<n> +refs/heads/<base>:refs/remotes/<remote>/<base>`.
   `<base>` is the PR's `baseRefName`: bind and check it as the ground
-  rule in `SKILL.md` says, and use `"$FORGE_BASE"` here and in every later
-  command that names it.
+  rule in `SKILL.md` says, and use `"${FORGE_BASE}"` here and in every
+  later command that names it — the refspec becomes
+  `"+refs/heads/${FORGE_BASE}:refs/remotes/<remote>/${FORGE_BASE}"`.
   The leading `+` matters: on a re-review after a force-push, a fetch
   without it is rejected as non-fast-forward and `pr/<n>` silently stays at
   the old head. Then check that `git rev-parse pr/<n>` equals the head SHA

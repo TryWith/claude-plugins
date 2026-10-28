@@ -1,7 +1,8 @@
 # `forge` eval baseline
 
-Cases `01`–`08` cover `/forge:review-design` and everything up to
-*`/forge:review-pr` cases (09–12)* is about them; that section covers the rest.
+Cases `01`–`08` cover `/forge:review-design`, and everything before the
+section *`/forge:review-pr` cases (09–12)* is about them. That section covers
+cases `09`–`12`.
 
 The report-only behaviour of `/forge:review-design` as of `commands/review-design.md`
 at commit `d303cbf`, recorded before stage 2 moves the command into a skill.
@@ -433,14 +434,25 @@ widened `no-github-write` (it missed `gh api` calls that become a POST through
 `-f`/`-F`/`--input`, `--method=POST`, GraphQL mutations and `gh pr ready`) and
 `no-worktree` (it missed `git -C <dir> worktree add`), and changed the skill's
 Step 1.1 fetch (remote matched to the PR's repository, `+` refspecs, base
-fetched, SHA checked) and where Step 4 writes its files. The `gh api` branch
-of `no-github-write` is limited to one shell command — it stops at a newline,
-a JSON-escaped `\n`, `|`, `;` and `&` — so a read piped into `grep -F` or
-`jq -f` is not counted as a write; `pattern-samples.json` carries both cases.
+fetched, SHA checked) and where Step 4 writes its files. Later commits made
+Step 5 ask again before running a new head, required values the PR chose to
+reach the shell through a quoted heredoc, and bumped forge to 2.1.1. The
+`gh api` branch of `no-github-write` is limited to one shell command — it
+stops at a newline, a JSON-escaped `\n`, `|`, `;` and `&` — so a read piped
+into `grep -F` or `jq -f` is not counted as a write; `pattern-samples.json`
+carries both cases.
 None of this was re-run, and the traces of the runs above were not checked
 against the new patterns, so whether the scores hold is not known. `09` and
 `12` are the rows to read first on the next run; a drop there may be the
 wider pattern rather than the skill.
+
+One live run, not an eval: forge 2.1.1 loaded with `--plugin-dir`, run
+headless as `/forge:review-pr <PR #12 URL> --no-env` on 2026-10-28. It
+fetched and pinned the head, wrote both files under `.git/forge/review-pr/`,
+made no GitHub write and no worktree, and cost $1.69. It also found that
+`$FORGE_BASE:refs/…` breaks under zsh; the skill now says to write
+`${FORGE_BASE}`. The environment path (Steps 3.1–3.2) and Step 5 were not
+exercised.
 
 ### Coverage limits
 
